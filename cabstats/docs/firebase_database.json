@@ -1,0 +1,312 @@
+{
+  "Collections": {
+    "users": {
+      "collectionDescription": "User accounts and authentication data",
+      "collectionAdditionalNote": "Main collection for user authentication. Each user document contains subcollections for rides, account balances, and ledger entries",
+      "fields": {
+        "uid": {
+          "fieldDescription": "Unique user identifier from Firebase Auth",
+          "additionalNote": "Used as document ID, automatically set by Firebase Auth"
+        },
+        "email": {
+          "fieldDescription": "User's email address",
+          "additionalNote": "Provided by Firebase Auth, used for authentication"
+        },
+        "displayName": {
+          "fieldDescription": "User's display name",
+          "additionalNote": "Provided by Firebase Auth, shown in UI"
+        },
+        "photoURL": {
+          "fieldDescription": "User's profile photo URL",
+          "additionalNote": "Provided by Firebase Auth, optional field"
+        }
+      },
+      "subcollections": {
+        "rides": {
+          "collectionDescription": "Individual ride records for each user",
+          "collectionAdditionalNote": "Stores all ride data including start/end locations, timing, fees, and payment information",
+          "fields": {
+            "id": {
+              "fieldDescription": "Unique ride identifier",
+              "additionalNote": "Auto-generated document ID, also stored as field for reference"
+            },
+            "userId": {
+              "fieldDescription": "User ID who owns this ride",
+              "additionalNote": "Reference to parent user document"
+            },
+            "startLocality": {
+              "fieldDescription": "Starting location name",
+              "additionalNote": "Required field, obtained from GPS location service"
+            },
+            "endLocality": {
+              "fieldDescription": "Ending location name",
+              "additionalNote": "Optional field, set when ride is completed"
+            },
+            "startTime": {
+              "fieldDescription": "Ride start timestamp",
+              "additionalNote": "Required field, stored as milliseconds since epoch"
+            },
+            "endTime": {
+              "fieldDescription": "Ride end timestamp",
+              "additionalNote": "Optional field, set when ride is completed or cancelled"
+            },
+            "km": {
+              "fieldDescription": "Distance traveled in kilometers",
+              "additionalNote": "Calculated or manually entered distance"
+            },
+            "fare": {
+              "fieldDescription": "Base fare amount",
+              "additionalNote": "Main fare amount before fees and tips"
+            },
+            "tollFee": {
+              "fieldDescription": "Toll fee amount",
+              "additionalNote": "Additional fee for tolls"
+            },
+            "platformFee": {
+              "fieldDescription": "Platform commission fee",
+              "additionalNote": "Fee charged by ride platform"
+            },
+            "otherFee": {
+              "fieldDescription": "Other miscellaneous fees",
+              "additionalNote": "Additional fees not covered by other categories"
+            },
+            "airportFee": {
+              "fieldDescription": "Airport pickup/drop-off fee",
+              "additionalNote": "Special fee for airport rides"
+            },
+            "paymentSplits": {
+              "fieldDescription": "Payment distribution across accounts",
+              "additionalNote": "Map of accountId to amount received"
+            },
+            "tollFeeAccount": {
+              "fieldDescription": "Account used for toll fee payments",
+              "additionalNote": "Reference to account collection"
+            },
+            "platformFeeAccount": {
+              "fieldDescription": "Account used for platform fee payments",
+              "additionalNote": "Reference to account collection"
+            },
+            "otherFeeAccount": {
+              "fieldDescription": "Account used for other fee payments",
+              "additionalNote": "Reference to account collection"
+            },
+            "airportFeeAccount": {
+              "fieldDescription": "Account used for airport fee payments",
+              "additionalNote": "Reference to account collection"
+            },
+            "status": {
+              "fieldDescription": "Current ride status",
+              "additionalNote": "Values: active, completed, cancelled"
+            },
+            "tip": {
+              "fieldDescription": "Tip amount received",
+              "additionalNote": "Calculated field: total received - fare - fees"
+            },
+            "profit": {
+              "fieldDescription": "Profit from the ride",
+              "additionalNote": "Calculated field: total received - fees"
+            },
+            "fuelAllocation": {
+              "fieldDescription": "Amount allocated for fuel",
+              "additionalNote": "Calculated field: profit / 2"
+            },
+            "profitPerKm": {
+              "fieldDescription": "Profit per kilometer",
+              "additionalNote": "Calculated field: profit / km"
+            },
+            "profitPerMin": {
+              "fieldDescription": "Profit per minute",
+              "additionalNote": "Calculated field: profit / duration in minutes"
+            }
+          }
+        },
+        "accountBalances": {
+          "collectionDescription": "Account balance tracking for each user",
+          "collectionAdditionalNote": "Stores current balance for each financial account",
+          "fields": {
+            "accountId": {
+              "fieldDescription": "Unique account identifier",
+              "additionalNote": "Used as document ID, references predefined accounts"
+            },
+            "accountName": {
+              "fieldDescription": "Display name of the account",
+              "additionalNote": "Human-readable account name"
+            },
+            "accountType": {
+              "fieldDescription": "Type of account",
+              "additionalNote": "Values: Federal Bank, Axis Bank, Physical Cash, Platform Wallets"
+            },
+            "balance": {
+              "fieldDescription": "Current account balance",
+              "additionalNote": "Real-time balance updated with transactions"
+            },
+            "lastUpdated": {
+              "fieldDescription": "Last balance update timestamp",
+              "additionalNote": "Stored as milliseconds since epoch"
+            }
+          }
+        },
+        "ledger": {
+          "collectionDescription": "Transaction ledger for each user",
+          "collectionAdditionalNote": "Detailed transaction history for all account activities",
+          "fields": {
+            "id": {
+              "fieldDescription": "Unique transaction identifier",
+              "additionalNote": "Auto-generated document ID"
+            },
+            "accountId": {
+              "fieldDescription": "Account affected by this transaction",
+              "additionalNote": "Reference to accountBalances collection"
+            },
+            "rideId": {
+              "fieldDescription": "Associated ride ID",
+              "additionalNote": "Reference to rides collection, empty for non-ride transactions"
+            },
+            "type": {
+              "fieldDescription": "Transaction type",
+              "additionalNote": "Values: debit (money going out), credit (money coming in)"
+            },
+            "category": {
+              "fieldDescription": "Transaction category",
+              "additionalNote": "Values: tollFee, platformFee, airportFee, otherFee, paymentReceived, rideStart, rideEnd, rideCancel, adjustment"
+            },
+            "amount": {
+              "fieldDescription": "Transaction amount",
+              "additionalNote": "Positive number, sign determined by type"
+            },
+            "description": {
+              "fieldDescription": "Transaction description",
+              "additionalNote": "Human-readable description of the transaction"
+            },
+            "timestamp": {
+              "fieldDescription": "Transaction timestamp",
+              "additionalNote": "Stored as milliseconds since epoch"
+            },
+            "reference": {
+              "fieldDescription": "Optional reference information",
+              "additionalNote": "Additional context like ride ID or external reference"
+            },
+            "nature": {
+              "fieldDescription": "Nature of the transaction",
+              "additionalNote": "Values: earning, expense, transfer, adjustment"
+            }
+          }
+        },
+        "accountTransfers": {
+          "collectionDescription": "Internal account transfers between user accounts",
+          "collectionAdditionalNote": "Records money movements between accounts without affecting the main ledger",
+          "fields": {
+            "id": {
+              "fieldDescription": "Unique transfer identifier",
+              "additionalNote": "Auto-generated document ID"
+            },
+            "fromAccountId": {
+              "fieldDescription": "ID of the source account",
+              "additionalNote": "Reference to accountBalances collection"
+            },
+            "toAccountId": {
+              "fieldDescription": "ID of the destination account",
+              "additionalNote": "Reference to accountBalances collection"
+            },
+            "amount": {
+              "fieldDescription": "Amount transferred",
+              "additionalNote": "Positive value"
+            },
+            "note": {
+              "fieldDescription": "Optional transfer note",
+              "additionalNote": "User-provided description for the transfer"
+            },
+            "timestamp": {
+              "fieldDescription": "Transfer timestamp",
+              "additionalNote": "Stored as milliseconds since epoch"
+            }
+          }
+        },
+        "pendingFuelAllocation": {
+          "collectionDescription": "Pending fuel allocation awaiting transfer",
+          "collectionAdditionalNote": "Single document per user storing accumulated fuel allocation from completed rides",
+          "fields": {
+            "id": {
+              "fieldDescription": "Document ID (usually 'current')",
+              "additionalNote": "Fixed ID to maintain single document per user"
+            },
+            "amount": {
+              "fieldDescription": "Total pending fuel allocation amount",
+              "additionalNote": "Accumulated from all completed rides"
+            },
+            "lastUpdated": {
+              "fieldDescription": "Last update timestamp",
+              "additionalNote": "Milliseconds since epoch"
+            },
+            "rideIds": {
+              "fieldDescription": "List of ride IDs that contributed to this allocation",
+              "additionalNote": "Array of ride document IDs"
+            }
+          }
+        },
+        "refuels": {
+          "collectionDescription": "Detailed refuel records with location and statistics data",
+          "collectionAdditionalNote": "Separate collection for refuel tracking and future statistics calculations",
+          "fields": {
+            "id": {
+              "fieldDescription": "Document ID (auto-generated)",
+              "additionalNote": "Unique identifier for each refuel record"
+            },
+            "cost": {
+              "fieldDescription": "Fuel cost amount",
+              "additionalNote": "Positive number representing fuel expense"
+            },
+            "kilometers": {
+              "fieldDescription": "Odometer reading at time of refuel",
+              "additionalNote": "Kilometer reading for mileage tracking"
+            },
+            "timestamp": {
+              "fieldDescription": "Refuel timestamp",
+              "additionalNote": "Milliseconds since epoch"
+            },
+            "location": {
+              "fieldDescription": "Refuel location",
+              "additionalNote": "Optional location string (auto-fetched or manual entry)"
+            },
+            "notes": {
+              "fieldDescription": "Additional notes",
+              "additionalNote": "Optional user notes about the refuel"
+            }
+          }
+        }
+      }
+    }
+  },
+  "PredefinedAccounts": {
+    "federal_bank": {
+      "name": "Main Account",
+      "type": "Federal Bank",
+      "description": "Primary bank account for main transactions"
+    },
+    "axis_bank": {
+      "name": "Fuel Reserve",
+      "type": "Axis Bank",
+      "description": "Secondary account for fuel expenses"
+    },
+    "cash": {
+      "name": "Cash Wallet",
+      "type": "Physical Cash",
+      "description": "Physical cash transactions"
+    },
+    "platform_wallets": {
+      "name": "Digital Wallets",
+      "type": "Platform Wallets",
+      "description": "Digital wallet platforms like Paytm, PhonePe, etc."
+    }
+  },
+  "DatabaseStructure": {
+    "hierarchy": "users/{userId}/rides/{rideId}",
+    "hierarchy": "users/{userId}/accountBalances/{accountId}",
+    "hierarchy": "users/{userId}/ledger/{transactionId}",
+    "hierarchy": "users/{userId}/accountTransfers/{transferId}",
+    "hierarchy": "users/{userId}/pendingFuelAllocation/{docId}",
+    "hierarchy": "users/{userId}/refuels/{refuelId}",
+    "security": "Each user can only access their own subcollections",
+    "indexing": "Rides indexed by status and startTime, Ledger indexed by accountId and timestamp, Transfers indexed by timestamp, Fuel allocation indexed by lastUpdated, Refuels indexed by timestamp"
+  }
+}

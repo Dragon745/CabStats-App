@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "556220831365",
+    "project_id": "cabstats-bb4ab",
+    "storage_bucket": "cabstats-bb4ab.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:556220831365:android:dd18d4054c5fd022313bec",
+        "android_client_info": {
+          "package_name": "com.example.cabstats"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "556220831365-41n6710vif7mh62trs4r0rj22qnfi6on.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cabstats",
+            "certificate_hash": "56ce160e39804023639f32815e1dea2a649c7a4d"
+          }
+        },
+        {
+          "client_id": "556220831365-r1155mgc9q77puaunjekis34j8icalai.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCec2eRLFRjxA-XWGOsSmtZk0nyL-tlTDU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "556220831365-r1155mgc9q77puaunjekis34j8icalai.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

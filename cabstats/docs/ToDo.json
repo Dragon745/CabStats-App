@@ -1,0 +1,382 @@
+{
+  "ProjectName": "Sample Project Manager",
+  "ProjectDescription": "A comprehensive demonstration project showcasing various phases, tasks, and file management scenarios for testing the project management application.",
+  "ProjectGoal": "Create a fully functional project management system with multiple phases, diverse tasks, and comprehensive file organization.",
+  "Phases": [
+    {
+      "PhaseName": "Project Initialization",
+      "DisplayPhaseName": "Phase 0: Project Initialization",
+      "Goal": "Set up the foundation and establish project structure",
+      "IsCompleted": false,
+      "IsSelected": true,
+      "Tasks": [
+        {
+          "TaskName": "Project Repository Setup",
+          "Goal": "Initialize Git repository and configure version control",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            ".gitignore": "Git ignore file for common exclusions",
+            "README.md": "Project documentation and setup instructions",
+            "LICENSE": "Project license file",
+            "CHANGELOG.md": "Version history and changes log"
+          },
+          "AdditionalNotes": "Ensure proper Git configuration and branch protection rules are set up"
+        },
+        {
+          "TaskName": "Development Environment Configuration",
+          "Goal": "Set up local development environment with all necessary tools",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "dev-setup.md": "Development environment setup guide",
+            "requirements.txt": "Python dependencies list",
+            "package.json": "Node.js project configuration",
+            ".env.example": "Environment variables template"
+          },
+          "AdditionalNotes": "Include IDE configuration files and debugging setup instructions"
+        },
+        {
+          "TaskName": "Project Structure Planning",
+          "Goal": "Design and document the overall project architecture",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "architecture.md": "System architecture documentation",
+            "folder-structure.md": "Project folder organization guide",
+            "naming-conventions.md": "Code and file naming standards"
+          },
+          "AdditionalNotes": "Consider scalability and maintainability in the design"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Database Design",
+      "DisplayPhaseName": "Phase 1: Database Design",
+      "Goal": "Design and implement the database schema and data models",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "Database Schema Design",
+          "Goal": "Create comprehensive database schema with proper relationships",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "database/schema.sql": "Main database schema file",
+            "database/migrations/": "Database migration files",
+            "database/seeds/": "Sample data seed files",
+            "docs/database-design.md": "Database design documentation"
+          },
+          "AdditionalNotes": "Include foreign key constraints, indexes, and data validation rules"
+        },
+        {
+          "TaskName": "Data Models Implementation",
+          "Goal": "Implement ORM models and data access layer",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "models/User.cs": "User model with authentication properties",
+            "models/Project.cs": "Project model with relationships",
+            "models/Task.cs": "Task model with status tracking"
+          },
+          "FilesToCreate": {
+            "models/BaseModel.cs": "Base model class with common properties",
+            "models/Enums/": "Enumeration definitions",
+            "services/DataService.cs": "Data access service layer"
+          },
+          "AdditionalNotes": "Implement proper validation attributes and data annotations"
+        },
+        {
+          "TaskName": "Database Migration System",
+          "Goal": "Set up automated database migration and versioning system",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "database/migrations/": "Add migration scripts"
+          },
+          "FilesToCreate": {
+            "database/migration-tool.cs": "Custom migration tool",
+            "scripts/run-migrations.ps1": "PowerShell migration script",
+            "docs/migration-guide.md": "Migration process documentation"
+          },
+          "AdditionalNotes": "Include rollback procedures and data backup strategies"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Backend Development",
+      "DisplayPhaseName": "Phase 2: Backend Development",
+      "Goal": "Develop the core backend services and API endpoints",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "API Controller Implementation",
+          "Goal": "Create RESTful API controllers for all major entities",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "Controllers/BaseController.cs": "Add common controller functionality"
+          },
+          "FilesToCreate": {
+            "Controllers/UserController.cs": "User management API endpoints",
+            "Controllers/ProjectController.cs": "Project management API endpoints",
+            "Controllers/TaskController.cs": "Task management API endpoints",
+            "Controllers/AuthController.cs": "Authentication and authorization endpoints"
+          },
+          "AdditionalNotes": "Implement proper HTTP status codes and error handling"
+        },
+        {
+          "TaskName": "Business Logic Services",
+          "Goal": "Implement core business logic and service layer",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "Services/DataService.cs": "Add business logic methods"
+          },
+          "FilesToCreate": {
+            "Services/UserService.cs": "User-related business logic",
+            "Services/ProjectService.cs": "Project management logic",
+            "Services/TaskService.cs": "Task workflow and status management",
+            "Services/NotificationService.cs": "Email and notification handling"
+          },
+          "AdditionalNotes": "Include proper error handling and logging throughout"
+        },
+        {
+          "TaskName": "Authentication and Authorization",
+          "Goal": "Implement secure authentication and role-based access control",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "Controllers/AuthController.cs": "Add JWT token generation",
+            "Services/UserService.cs": "Add password hashing and validation"
+          },
+          "FilesToCreate": {
+            "Middleware/JwtMiddleware.cs": "JWT token validation middleware",
+            "Middleware/AuthorizationMiddleware.cs": "Role-based access control",
+            "Models/AuthModels.cs": "Authentication request/response models",
+            "config/jwt-settings.json": "JWT configuration settings"
+          },
+          "AdditionalNotes": "Implement refresh tokens and secure password policies"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Frontend Development",
+      "DisplayPhaseName": "Phase 3: Frontend Development",
+      "Goal": "Build the user interface and client-side functionality",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "User Interface Components",
+          "Goal": "Create reusable UI components and design system",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "src/components/Button.tsx": "Reusable button component",
+            "src/components/Modal.tsx": "Modal dialog component",
+            "src/components/Table.tsx": "Data table component",
+            "src/components/Form.tsx": "Form input components",
+            "src/styles/components.css": "Component-specific styles"
+          },
+          "AdditionalNotes": "Ensure accessibility compliance and responsive design"
+        },
+        {
+          "TaskName": "Page Layouts and Routing",
+          "Goal": "Implement page layouts and client-side routing",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "src/App.tsx": "Add routing configuration"
+          },
+          "FilesToCreate": {
+            "src/pages/Dashboard.tsx": "Main dashboard page",
+            "src/pages/Projects.tsx": "Projects listing page",
+            "src/pages/Tasks.tsx": "Tasks management page",
+            "src/pages/Profile.tsx": "User profile page",
+            "src/layouts/MainLayout.tsx": "Main application layout"
+          },
+          "AdditionalNotes": "Implement lazy loading and code splitting for better performance"
+        },
+        {
+          "TaskName": "State Management",
+          "Goal": "Implement client-side state management and data flow",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "src/App.tsx": "Add state management provider"
+          },
+          "FilesToCreate": {
+            "src/store/index.ts": "Main store configuration",
+            "src/store/slices/userSlice.ts": "User state management",
+            "src/store/slices/projectSlice.ts": "Project state management",
+            "src/store/slices/taskSlice.ts": "Task state management",
+            "src/hooks/useApi.ts": "Custom API hook"
+          },
+          "AdditionalNotes": "Implement proper error handling and loading states"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Testing Implementation",
+      "DisplayPhaseName": "Phase 4: Testing Implementation",
+      "Goal": "Implement comprehensive testing strategy across all layers",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "Unit Testing Setup",
+          "Goal": "Set up unit testing framework and write core unit tests",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "Services/UserService.cs": "Add unit test coverage",
+            "Services/ProjectService.cs": "Add unit test coverage"
+          },
+          "FilesToCreate": {
+            "Tests/Unit/UserServiceTests.cs": "User service unit tests",
+            "Tests/Unit/ProjectServiceTests.cs": "Project service unit tests",
+            "Tests/Unit/TaskServiceTests.cs": "Task service unit tests",
+            "Tests/Helpers/TestData.cs": "Test data helpers and fixtures"
+          },
+          "AdditionalNotes": "Achieve minimum 80% code coverage for all business logic"
+        },
+        {
+          "TaskName": "Integration Testing",
+          "Goal": "Implement API integration tests and database testing",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "Controllers/UserController.cs": "Add integration test coverage"
+          },
+          "FilesToCreate": {
+            "Tests/Integration/ApiTests.cs": "API endpoint integration tests",
+            "Tests/Integration/DatabaseTests.cs": "Database integration tests",
+            "Tests/Integration/AuthTests.cs": "Authentication flow tests",
+            "Tests/Setup/TestDatabase.cs": "Test database setup and teardown"
+          },
+          "AdditionalNotes": "Use test database and mock external dependencies"
+        },
+        {
+          "TaskName": "Frontend Testing",
+          "Goal": "Implement frontend component and integration testing",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "src/components/Button.tsx": "Add component tests",
+            "src/pages/Dashboard.tsx": "Add page component tests"
+          },
+          "FilesToCreate": {
+            "src/__tests__/components/Button.test.tsx": "Button component tests",
+            "src/__tests__/pages/Dashboard.test.tsx": "Dashboard page tests",
+            "src/__tests__/hooks/useApi.test.ts": "Custom hook tests",
+            "src/__tests__/utils/test-utils.tsx": "Testing utilities and helpers"
+          },
+          "AdditionalNotes": "Include accessibility testing and user interaction scenarios"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Deployment and DevOps",
+      "DisplayPhaseName": "Phase 5: Deployment and DevOps",
+      "Goal": "Set up deployment pipeline and production infrastructure",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "CI/CD Pipeline Setup",
+          "Goal": "Configure continuous integration and deployment pipeline",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "package.json": "Add build and test scripts"
+          },
+          "FilesToCreate": {
+            ".github/workflows/ci.yml": "GitHub Actions CI workflow",
+            ".github/workflows/deploy.yml": "GitHub Actions deployment workflow",
+            "scripts/build.sh": "Build script for production",
+            "scripts/deploy.sh": "Deployment automation script"
+          },
+          "AdditionalNotes": "Include automated testing, code quality checks, and security scanning"
+        },
+        {
+          "TaskName": "Docker Containerization",
+          "Goal": "Containerize the application for consistent deployment",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "Dockerfile": "Main application Dockerfile",
+            "docker-compose.yml": "Multi-container setup",
+            "docker-compose.prod.yml": "Production Docker configuration",
+            ".dockerignore": "Docker ignore file",
+            "scripts/docker-build.sh": "Docker build automation"
+          },
+          "AdditionalNotes": "Optimize image size and implement multi-stage builds"
+        },
+        {
+          "TaskName": "Production Environment Setup",
+          "Goal": "Configure production servers and monitoring",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "config/production.json": "Production configuration settings"
+          },
+          "FilesToCreate": {
+            "infrastructure/terraform/": "Infrastructure as code",
+            "monitoring/prometheus.yml": "Monitoring configuration",
+            "monitoring/grafana/": "Dashboard configurations",
+            "scripts/monitoring-setup.sh": "Monitoring setup script"
+          },
+          "AdditionalNotes": "Set up SSL certificates, load balancing, and backup systems"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    },
+    {
+      "PhaseName": "Documentation and Training",
+      "DisplayPhaseName": "Phase 6: Documentation and Training",
+      "Goal": "Create comprehensive documentation and user training materials",
+      "IsCompleted": false,
+      "IsSelected": false,
+      "Tasks": [
+        {
+          "TaskName": "Technical Documentation",
+          "Goal": "Create comprehensive technical documentation for developers",
+          "IsCompleted": false,
+          "FilesToEdit": {
+            "README.md": "Update with comprehensive setup instructions"
+          },
+          "FilesToCreate": {
+            "docs/api-reference.md": "Complete API documentation",
+            "docs/architecture.md": "Detailed system architecture",
+            "docs/deployment-guide.md": "Deployment and operations guide",
+            "docs/development-guide.md": "Development workflow and standards"
+          },
+          "AdditionalNotes": "Include code examples, troubleshooting guides, and best practices"
+        },
+        {
+          "TaskName": "User Documentation",
+          "Goal": "Create user manuals and help documentation",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "docs/user-manual.md": "End-user manual and guide",
+            "docs/quick-start.md": "Quick start guide for new users",
+            "docs/faq.md": "Frequently asked questions",
+            "docs/troubleshooting.md": "Common issues and solutions"
+          },
+          "AdditionalNotes": "Include screenshots, step-by-step instructions, and video tutorials"
+        },
+        {
+          "TaskName": "Training Materials",
+          "Goal": "Develop training materials for team onboarding",
+          "IsCompleted": false,
+          "FilesToEdit": {},
+          "FilesToCreate": {
+            "training/onboarding-guide.md": "New team member onboarding",
+            "training/technical-training.md": "Technical skills training",
+            "training/user-training.md": "End-user training materials",
+            "training/video-scripts/": "Video tutorial scripts"
+          },
+          "AdditionalNotes": "Create interactive tutorials and hands-on exercises"
+        }
+      ],
+      "TaskCountText": "0/3 tasks completed"
+    }
+  ]
+}
