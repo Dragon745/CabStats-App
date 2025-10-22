@@ -134,6 +134,43 @@ class _EditRideScreenState extends State<EditRideScreen> {
   Future<void> _saveRide() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Additional validation for payment splits
+    final paymentSplits = _getPaymentSplits();
+    final totalPaymentAmount = paymentSplits.values.fold(0.0, (sum, amount) => sum + amount);
+    
+    if (totalPaymentAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter at least one payment amount'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validate account selections
+    if (_tollFeeAccount.isEmpty || _platformFeeAccount.isEmpty || 
+        _otherFeeAccount.isEmpty || _airportFeeAccount.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select accounts for all fee types'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validate that payment splits don't exceed reasonable limits
+    if (totalPaymentAmount > 10000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment amount seems too high. Please verify the amount.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
@@ -147,21 +184,14 @@ class _EditRideScreenState extends State<EditRideScreen> {
         platformFee: double.parse(_platformFeeController.text),
         otherFee: double.parse(_otherFeeController.text),
         airportFee: double.parse(_airportFeeController.text),
-        paymentSplits: _getPaymentSplits(),
+        paymentSplits: paymentSplits,
         tollFeeAccount: _tollFeeAccount,
         platformFeeAccount: _platformFeeAccount,
         otherFeeAccount: _otherFeeAccount,
         airportFeeAccount: _airportFeeAccount,
       );
 
-      // First, reverse old transactions
-      await _accountService.reverseRideTransactions(widget.ride.id);
-
-      // Update the ride document
-      await _rideService.updateRide(widget.ride.id, updatedRide.toJson());
-
-      // Process new transactions
-      final paymentSplits = _getPaymentSplits();
+      // Use atomic transaction processing
       final feeDeductions = <String, double>{};
       final paymentCredits = <String, double>{};
 
@@ -181,27 +211,37 @@ class _EditRideScreenState extends State<EditRideScreen> {
         paymentCredits[entry.key] = entry.value;
       }
 
-      // Process transactions
-      await _accountService.processRideTransactions(
+      // Calculate fuel allocation
+      final fuelAllocation = _calculateProfit() / 2;
+
+      // Process transactions atomically
+      final success = await _accountService.processRideTransactionsAtomically(
         rideId: widget.ride.id,
         feeDeductions: feeDeductions,
         paymentCredits: paymentCredits,
+        rideData: updatedRide.toJson(),
+        fuelAllocation: fuelAllocation > 0 ? fuelAllocation : null,
       );
 
-      // Add fuel allocation
-      final fuelAllocation = _calculateProfit() / 2;
-      if (fuelAllocation > 0) {
-        await _accountService.addPendingFuelAllocation(fuelAllocation, widget.ride.id);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ride updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context, true); // Return true to indicate success
+      if (success) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Ride updated successfully!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true); // Return true to indicate success
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to update ride. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {

@@ -142,13 +142,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Future<void> _loadAccountBalances() async {
     try {
-      final balances = <String, double>{};
-      for (final account in _accounts) {
-        final balance = await _accountService.getAccountBalance(account.id);
-        balances[account.id] = balance;
-      }
-      
-      _accountBalances = balances;
+      final accountIds = _accounts.map((account) => account.id).toList();
+      _accountBalances = await _accountService.getMultipleAccountBalances(accountIds);
     } catch (e) {
       print('Error loading account balances: $e');
     }
@@ -211,6 +206,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     try {
       final amount = double.parse(_amountController.text);
       final description = _descriptionController.text.trim();
+      
+      // Check if account has sufficient balance
+      final currentBalance = _accountBalances[_selectedAccountId!] ?? 0.0;
+      if (currentBalance < amount) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Insufficient balance. Available: ₹${currentBalance.toStringAsFixed(2)}, Required: ₹${amount.toStringAsFixed(2)}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+
+      // Warn if balance will go negative
+      final newBalance = currentBalance - amount;
+      if (newBalance < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Warning: This expense will result in a negative balance of ₹${newBalance.abs().toStringAsFixed(2)}'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       
       final success = await _accountService.recordExpense(
         accountId: _selectedAccountId!,

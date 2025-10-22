@@ -41,27 +41,12 @@ class _RidesHistoryScreenState extends State<RidesHistoryScreen> {
     });
 
     try {
-      print('🔄 Loading rides history...');
-      
-      // Debug: Get raw data first
-      final rawRides = await _rideService.getAllRidesRaw();
-      print('📊 Raw rides data: ${rawRides.length}');
-      
-      // Try to load all rides first to see what we have
-      final allRides = await _rideService.getRideHistory(limit: 100);
-      print('📊 Total rides found: ${allRides.length}');
-      
-      for (final ride in allRides) {
-        print('🚗 Ride: ${ride.id} - Status: ${ride.status.name} - Start: ${ride.startLocality}');
-      }
-      
       final results = await Future.wait([
         _rideService.getCompletedRides(limit: 50),
         _rideService.getComprehensiveStatistics(),
       ]);
 
       final completedRides = results[0] as List<Ride>;
-      print('✅ Completed rides loaded: ${completedRides.length}');
 
       setState(() {
         _rides = completedRides;
@@ -69,7 +54,6 @@ class _RidesHistoryScreenState extends State<RidesHistoryScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('❌ Error loading rides: $e');
       setState(() {
         _isLoading = false;
       });

@@ -1183,7 +1183,6 @@ class _RefuelScreenState extends State<RefuelScreen> {
         _locationController.text = location;
       }
     } catch (e) {
-      print('❌ Error getting location: $e');
       // Location will remain empty if failed
     } finally {
       setState(() => _isGettingLocation = false);

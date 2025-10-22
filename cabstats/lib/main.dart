@@ -9,14 +9,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   
-  // Initialize account balances for authenticated users
-  FirebaseAuth.instance.authStateChanges().listen((User? user) {
-    if (user != null) {
-      // User is signed in, initialize account balances
-      AccountBalanceService().initializeAllAccountBalances();
-    }
-  });
-  
   runApp(const MyApp());
 }
 
@@ -37,8 +29,15 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _hasInitializedAccounts = false;
 
   @override
   Widget build(BuildContext context) {
@@ -58,8 +57,18 @@ class AuthWrapper extends StatelessWidget {
         
         // If user is logged in, show home screen
         if (snapshot.hasData) {
+          // Initialize account balances only once per session
+          if (!_hasInitializedAccounts) {
+            _hasInitializedAccounts = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              AccountBalanceService().initializeAllAccountBalances();
+            });
+          }
           return const HomeScreen();
         }
+        
+        // Reset initialization flag when user logs out
+        _hasInitializedAccounts = false;
         
         // If user is not logged in, show login screen
         return const LoginScreen();

@@ -40,7 +40,6 @@ class _NewRideScreenState extends State<NewRideScreen> {
       
       // Debug: Print detailed location info
       final detailedInfo = await _locationService.getDetailedLocationInfo();
-      print('Detailed Location Info: $detailedInfo');
     } catch (e) {
       setState(() {
         _errorMessage = 'Failed to get location: ${e.toString()}';
@@ -60,23 +59,19 @@ class _NewRideScreenState extends State<NewRideScreen> {
       return;
     }
 
-    print('Starting ride with locality: $_currentLocality');
     setState(() {
       _isLoading = true;
     });
 
     try {
-      print('Calling rideService.startRide...');
       final ride = await _rideService.startRide(_currentLocality!).timeout(
         const Duration(seconds: 15),
         onTimeout: () {
           throw Exception('Ride creation timed out. Please check your internet connection.');
         },
       );
-      print('Ride service returned: ${ride != null ? "Success" : "Failed"}');
       
       if (ride != null) {
-        print('Navigating to ActiveRideScreen...');
         // Navigate to Active Ride screen
         Navigator.pushReplacement(
           context,
@@ -86,7 +81,6 @@ class _NewRideScreenState extends State<NewRideScreen> {
         );
         // Don't set loading to false here since we're navigating away
       } else {
-        print('Ride creation failed');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to start ride. Please try again.'),
@@ -98,7 +92,6 @@ class _NewRideScreenState extends State<NewRideScreen> {
         });
       }
     } catch (e) {
-      print('Error in _startRide: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error starting ride: ${e.toString()}'),
