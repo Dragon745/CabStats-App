@@ -12,6 +12,7 @@ import 'end_ride_wizard_screen.dart';
 import 'accounts_screen.dart';
 import 'fuel_screen.dart';
 import 'expense_screen.dart';
+import 'expense_stats_screen.dart';
 import 'rides_history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -36,51 +37,56 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           children: [
             CircleAvatar(
-              radius: 16,
+              radius: 18,
               backgroundImage: user?.photoURL != null
                   ? NetworkImage(user!.photoURL!)
                   : null,
               child: user?.photoURL == null
                   ? const Icon(
                       Icons.person,
-                      size: 18,
-                      color: Colors.white,
+                      size: 20,
+                      color: Color(0xFF5F6368),
                     )
                   : null,
             ),
             const SizedBox(width: 12),
-            const Text('CabStats'),
+            const Text(
+              'CabStats',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0,
+                color: Color(0xFF202124),
+              ),
+            ),
           ],
         ),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF202124),
         elevation: 0,
+        surfaceTintColor: const Color(0xFFE8EAED),
         actions: [
-          // Sign Out Button
+          // QR Code Button
           IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await _authService.signOut();
+            icon: const Icon(Icons.qr_code, color: Color(0xFF5F6368)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const QRCodeScreen(),
+                ),
+              );
             },
-            tooltip: 'Sign Out',
+            tooltip: 'Payment QR Code',
           ),
         ],
       ),
       drawer: _buildDrawer(context),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade50,
-              Colors.white,
-            ],
-          ),
-        ),
+        color: const Color(0xFFF8F9FA),
         child: SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -95,7 +101,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return _buildRideCard(context, hasActiveRide, activeRide, _rideService);
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
 
                 // Comprehensive Balance & Accounts Card
                 FutureBuilder<List<Account>>(
@@ -155,27 +161,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     return Container(
                       width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.deepPurple, Colors.purple],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.deepPurple.withOpacity(0.3),
-                            spreadRadius: 1,
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE8EAED)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Header with Total Balance and QR Button
+                          // Header with Total Balance and Actions
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
@@ -183,21 +179,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                       'Total Balance',
                                       style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.white70,
-                                        fontWeight: FontWeight.w500,
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w400,
+                                        letterSpacing: 0,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 8),
                                     Text(
                                       '₹${totalBalance.toStringAsFixed(2)}',
                                       style: const TextStyle(
-                                        fontSize: 28,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.w400,
+                                        color: Color(0xFF202124),
+                                        letterSpacing: -0.5,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                       maxLines: 1,
@@ -205,63 +203,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ],
                                 ),
                               ),
-                              // Action Buttons Row
-                              Row(
-                                children: [
-                                  // Refresh Button
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.refresh,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                      onPressed: _refreshAccountBalances,
-                                      tooltip: 'Refresh Balances',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // QR Code Button
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.qr_code,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                      onPressed: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => const QRCodeScreen(),
-                                          ),
-                                        );
-                                      },
-                                      tooltip: 'Payment QR Code',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
+                              // Refresh Button
+                              IconButton(
+                                icon: const Icon(Icons.refresh, size: 20),
+                                color: const Color(0xFF5F6368),
+                                onPressed: _refreshAccountBalances,
+                                tooltip: 'Refresh Balances',
+                                style: IconButton.styleFrom(
+                                  backgroundColor: const Color(0xFFF8F9FA),
+                                ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 20),
                           
                           // Accounts Grid
-                          Text(
+                          const Text(
                             'Account Breakdown',
                             style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white.withOpacity(0.9),
-                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: Color(0xFF202124),
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -272,9 +235,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             physics: const NeverScrollableScrollPhysics(),
                             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                               crossAxisCount: 2,
-                              childAspectRatio: 1.8,
+                              childAspectRatio: 1.6,
                               crossAxisSpacing: 8,
-                              mainAxisSpacing: 4,
+                              mainAxisSpacing: 8,
                             ),
                             itemCount: accounts.length,
                             itemBuilder: (context, index) {
@@ -287,7 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
 
                 // Pending Fuel Allocation Card
                 StreamBuilder<PendingFuelAllocation?>(
@@ -296,26 +259,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (snapshot.hasData && snapshot.data != null && snapshot.data!.amount > 0) {
                       final allocation = snapshot.data!;
                       return Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.orange.shade400,
-                              Colors.orange.shade600,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.orange.shade200,
-                              spreadRadius: 2,
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
+                          color: const Color(0xFFFB8500),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,10 +271,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             Row(
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(8),
+                                  width: 48,
+                                  height: 48,
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(
                                     Icons.local_gas_station,
@@ -340,8 +289,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                     'Pending Fuel Allocation',
                                     style: TextStyle(
                                       fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w500,
                                       color: Colors.white,
+                                      letterSpacing: 0,
                                     ),
                                   ),
                                 ),
@@ -358,30 +308,22 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
                             Text(
                               '₹${allocation.amount.toStringAsFixed(2)}',
                               style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 40,
+                                fontWeight: FontWeight.w400,
                                 color: Colors.white,
+                                letterSpacing: -1,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'From ${allocation.rideIds.length} ride${allocation.rideIds.length > 1 ? 's' : ''}',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 13,
                                 color: Colors.white.withOpacity(0.9),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Tap to transfer to Fuel Reserve →',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.white.withOpacity(0.8),
-                                fontStyle: FontStyle.italic,
                               ),
                             ),
                           ],
@@ -391,8 +333,76 @@ class _HomeScreenState extends State<HomeScreen> {
                     return const SizedBox.shrink();
                   },
                 ),
+                const SizedBox(height: 12),
+
+                // Quick Actions (Only Add Expense)
+                SizedBox(
+                  width: double.infinity,
+                  child: _buildQuickActionCard(
+                    icon: Icons.receipt_long,
+                    color: const Color(0xFF10B981),
+                    label: 'Add Expense',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ExpenseScreen()),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE8EAED)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF202124),
+                  letterSpacing: 0,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -404,58 +414,60 @@ class _HomeScreenState extends State<HomeScreen> {
     
     return Drawer(
       child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade800,
-              Colors.deepPurple.shade400,
-            ],
-          ),
-        ),
+        color: const Color(0xFFF8F9FA),
         child: Column(
           children: [
-            // Drawer Header
+            // User Header
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.only(
-                top: 60,
-                bottom: 20,
-                left: 20,
-                right: 20,
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 16, 16, 24),
+              decoration: const BoxDecoration(
+                color: Color(0xFF4285F4),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundImage: user?.photoURL != null
-                        ? NetworkImage(user!.photoURL!)
-                        : null,
-                    child: user?.photoURL == null
-                        ? const Icon(
-                            Icons.person,
-                            size: 30,
-                            color: Colors.white,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    user?.displayName ?? 'User',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    user?.email ?? '',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        backgroundColor: Colors.white.withOpacity(0.3),
+                        backgroundImage: user?.photoURL != null ? NetworkImage(user!.photoURL!) : null,
+                        child: user?.photoURL == null
+                            ? const Icon(Icons.person, size: 28, color: Colors.white)
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user?.displayName ?? 'User',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                                letterSpacing: 0.15,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user?.email ?? '',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                                letterSpacing: 0.1,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -463,137 +475,91 @@ class _HomeScreenState extends State<HomeScreen> {
             
             // Menu Items
             Expanded(
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+              child: ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.account_balance,
+                    title: 'Accounts',
+                    subtitle: 'Manage your accounts',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AccountsScreen()),
+                      );
+                    },
                   ),
-                ),
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    const SizedBox(height: 20),
-                    
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.account_balance,
-                      title: 'Accounts',
-                      subtitle: 'Manage your accounts',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const AccountsScreen()),
-                        );
-                      },
-                    ),
-                    
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.directions_car,
-                      title: 'Rides',
-                      subtitle: 'View ride history',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const RidesHistoryScreen()),
-                        );
-                      },
-                    ),
-                    
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.local_gas_station,
-                      title: 'Fuel',
-                      subtitle: 'Manage fuel allocation',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const FuelScreen()),
-                        );
-                      },
-                    ),
-                    
-                    _buildDrawerItem(
-                      context,
-                      icon: Icons.receipt_long,
-                      title: 'Expense',
-                      subtitle: 'Manage expenses',
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const ExpenseScreen()),
-                        );
-                      },
-                    ),
-                    
-                    const SizedBox(height: 20),
-                    
-                    // Sign Out Button
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.logout,
-                          color: Colors.red,
-                        ),
-                        title: const Text(
-                          'Sign Out',
-                          style: TextStyle(
-                            color: Colors.red,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _authService.signOut();
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 8),
-                    
-                    // Reset All Data Button
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16),
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.delete_forever,
-                          color: Colors.orange,
-                        ),
-                        title: const Text(
-                          'Reset All Data',
-                          style: TextStyle(
-                            color: Colors.orange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: const Text(
-                          'Delete all rides, accounts, and transactions',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        onTap: () {
-                          Navigator.pop(context);
-                          _showResetDataDialog(context);
-                        },
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.directions_car,
+                    title: 'Rides',
+                    subtitle: 'View ride history',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const RidesHistoryScreen()),
+                      );
+                    },
+                  ),
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.local_gas_station,
+                    title: 'Fuel',
+                    subtitle: 'Manage fuel allocation',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const FuelScreen()),
+                      );
+                    },
+                  ),
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.receipt_long,
+                    title: 'Expense Stats',
+                    subtitle: 'View and analyze expenses',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ExpenseStatsScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  const SizedBox(height: 8),
+                  
+                  // Sign Out
+                  _buildDestructiveDrawerItem(
+                    context,
+                    icon: Icons.logout,
+                    title: 'Sign Out',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _authService.signOut();
+                    },
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  // Reset All Data
+                  _buildDestructiveDrawerItem(
+                    context,
+                    icon: Icons.delete_forever,
+                    title: 'Reset All Data',
+                    subtitle: 'Delete all rides, accounts, and transactions',
+                    isDestructive: false,
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showResetDataDialog(context);
+                    },
+                  ),
+                ],
               ),
             ),
           ],
@@ -610,230 +576,317 @@ class _HomeScreenState extends State<HomeScreen> {
     required VoidCallback onTap,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.deepPurple.shade50,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            color: Colors.deepPurple,
-            size: 20,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4285F4).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    color: const Color(0xFF4285F4),
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF202124),
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Colors.grey.shade400,
+                ),
+              ],
+            ),
           ),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 16,
+      ),
+    );
+  }
+
+  Widget _buildDestructiveDrawerItem(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    bool isDestructive = true,
+    required VoidCallback onTap,
+  }) {
+    final color = isDestructive ? const Color(0xFFEF4444) : const Color(0xFFEF6C00);
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  color: color,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: color,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                      if (subtitle != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        subtitle: Text(
-          subtitle,
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 12,
-          ),
-        ),
-        onTap: onTap,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-        hoverColor: Colors.deepPurple.shade50,
       ),
     );
   }
 
   Widget _buildRideCard(BuildContext context, bool hasActiveRide, Ride? activeRide, RideService rideService) {
     if (hasActiveRide && activeRide != null) {
-      // Active Ride Card
+      // Active Ride Card - Material Design 3
       return Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Colors.green, Colors.lightGreen],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.green.withOpacity(0.3),
-              spreadRadius: 1,
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          color: const Color(0xFF10B981),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.directions_car,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Ride in Progress',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'From: ${activeRide.startLocality.isNotEmpty ? activeRide.startLocality : 'Unknown Location'}',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 4),
-            StreamBuilder<DateTime>(
-              key: const ValueKey('ride_timer_stream'),
-              stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Text(
-                    'Duration: --:--:--',
-                    style: TextStyle(
-                      fontSize: 14,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.directions_car,
                       color: Colors.white,
+                      size: 24,
                     ),
-                  );
-                }
-                
-                final now = snapshot.data ?? DateTime.now();
-                final duration = now.difference(activeRide.startTime);
-                final durationString = _formatDuration(duration);
-                
-                return Text(
-                  'Duration: $durationString',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.white,
                   ),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _cancelRide(context, rideService, activeRide.id),
-                    icon: const Icon(Icons.cancel),
-                    label: const Text('Cancel'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Ride in Progress',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          activeRide.startLocality.isNotEmpty ? activeRide.startLocality : 'Unknown Location',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w400,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        StreamBuilder<DateTime>(
+                          key: const ValueKey('ride_timer_stream'),
+                          stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return Text(
+                                'Duration: --:--:--',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white.withOpacity(0.7),
+                                ),
+                              );
+                            }
+                            
+                            final now = snapshot.data ?? DateTime.now();
+                            final duration = now.difference(activeRide.startTime);
+                            final durationString = _formatDuration(duration);
+                            
+                            return Text(
+                              durationString,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.7),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _cancelRide(context, rideService, activeRide.id),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
                       ),
+                      child: const Text('Cancel'),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _endRide(context, activeRide),
-                    icon: const Icon(Icons.stop),
-                    label: const Text('End Ride'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () => _endRide(context, activeRide),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: const Color(0xFF10B981),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
                       ),
+                      child: const Text('End Ride'),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       );
     } else {
-      // Start Ride Card
+      // Start Ride Card - Material Design 3
       return Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(20),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Colors.deepPurple, Colors.purple],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.deepPurple.withOpacity(0.3),
-              spreadRadius: 1,
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          color: const Color(0xFF4285F4),
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.directions_car,
-                  color: Colors.white,
-                  size: 24,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Ready to Start Ride',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.directions_car,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Start New Ride',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => _startRide(context, rideService),
+                  icon: const Icon(Icons.play_arrow, size: 20),
+                  label: const Text('Start Ride'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF4285F4),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Tap to start a new ride',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
               ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: () => _startRide(context, rideService),
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start Ride'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.deepPurple,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -1091,27 +1144,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAccountInBalanceCard(Account account) {
+    // Map account IDs to Material icons
+    IconData accountIcon;
+    switch (account.id) {
+      case 'federal_bank':
+        accountIcon = Icons.account_balance;
+        break;
+      case 'axis_bank':
+        accountIcon = Icons.local_gas_station;
+        break;
+      case 'cash':
+        accountIcon = Icons.attach_money;
+        break;
+      case 'platform_wallets':
+        accountIcon = Icons.account_balance_wallet;
+        break;
+      default:
+        accountIcon = Icons.account_balance;
+    }
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(6),
+        color: Color(int.parse(account.color)).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: const Color(0xFFE8EAED),
           width: 1,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Text(
-                account.icon,
-                style: const TextStyle(fontSize: 16),
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Color(int.parse(account.color)).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  accountIcon,
+                  color: Color(int.parse(account.color)),
+                  size: 18,
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1119,9 +1200,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       account.name,
                       style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF202124),
+                        letterSpacing: 0,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -1129,8 +1211,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       account.type,
                       style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w400,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -1141,17 +1224,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           const SizedBox(height: 4),
-          Center(
-            child: Text(
-              '₹${account.balance.toStringAsFixed(0)}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+          Text(
+            '₹${account.balance.toStringAsFixed(0)}',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF4285F4),
+              letterSpacing: 0,
             ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ],
       ),

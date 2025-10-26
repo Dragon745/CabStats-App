@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/account.dart';
-import '../models/account_transfer.dart';
 import '../services/account_balance_service.dart';
+import 'account_history_screen.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -17,12 +17,33 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Map<String, double> _balances = {};
   bool _isLoading = true;
   String? _error;
-  List<AccountTransfer> _recentTransfers = [];
+
+  // Form state
+  final _formKey = GlobalKey<FormState>();
+  final _amountController = TextEditingController();
+  final _reasonController = TextEditingController();
+  final _noteController = TextEditingController();
+  
+  String? _selectedFromAccount;
+  String? _selectedToAccount;
+  String? _selectedAdjustmentAccount;
+  String _operationType = 'adjust';
+  bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
+    _selectedAdjustmentAccount = _accounts.first.id;
+    _selectedFromAccount = _accounts.first.id;
     _loadBalances();
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _reasonController.dispose();
+    _noteController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadBalances() async {
@@ -38,12 +59,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
         balances[account.id] = balance;
       }
       
-      // Load recent transfers
-      final transfers = await _accountService.getRecentTransfers(limit: 20);
-      
       setState(() {
         _balances = balances;
-        _recentTransfers = transfers;
         _isLoading = false;
       });
     } catch (e) {
@@ -54,896 +71,582 @@ class _AccountsScreenState extends State<AccountsScreen> {
     }
   }
 
+  double get _totalBalance {
+    return _balances.values.fold(0.0, (sum, balance) => sum + balance);
+  }
+
+  List<Account> get _availableToAccounts {
+    return _accounts.where((account) => account.id != _selectedFromAccount).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text('Accounts'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
         elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade50,
-              Colors.white,
-            ],
+        backgroundColor: Colors.white,
+        surfaceTintColor: const Color(0xFF4285F4),
+        title: const Text(
+          'Accounts',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF202124),
+            letterSpacing: 0.15,
           ),
         ),
-        child: SafeArea(
-          child: Column(
+        iconTheme: const IconThemeData(color: Color(0xFF5F6368)),
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AccountHistoryScreen()),
+              );
+            },
+            icon: const Icon(Icons.history, color: Color(0xFF4285F4)),
+            tooltip: 'Account History',
+          ),
+        ],
+      ),
+      body: _buildBody(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return Center(
+        child: CircularProgressIndicator(
+          strokeWidth: 3,
+          color: const Color(0xFF4285F4),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'Unable to load accounts',
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 16),
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _loadBalances,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF4285F4),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadBalances,
+      color: const Color(0xFF4285F4),
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTotalBalance(),
+                const SizedBox(height: 24),
+                _buildSectionHeader('Your Accounts'),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final account = _accounts[index];
+                final balance = _balances[account.id] ?? 0.0;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8, left: 16, right: 16),
+                  child: _buildAccountCard(account, balance),
+                );
+              },
+              childCount: _accounts.length,
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF5F6368),
+          letterSpacing: 0.25,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTotalBalance() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4285F4),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Account Balances',
+                      'Total Balance',
                       style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple.shade800,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withOpacity(0.9),
+                        letterSpacing: 0.5,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Manage your financial accounts',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
+                      '₹${_totalBalance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.w400,
+                        color: Colors.white,
+                        letterSpacing: -1,
+                        height: 1.0,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // Content
-              Expanded(
-                child: _buildContent(),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet,
+                  size: 24,
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showTransferDialog,
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.swap_horiz),
-        label: const Text('Transfer'),
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    if (_isLoading) {
-      return _buildLoadingState();
-    }
-
-    if (_error != null) {
-      return _buildErrorState();
-    }
-
-    return _buildAccountGrid();
-  }
-
-  Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(
-            'Loading account balances...',
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Colors.grey.shade400,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Error loading accounts',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Pull down to refresh',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade500,
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _loadBalances,
-            child: const Text('Retry'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAccountGrid() {
-    return RefreshIndicator(
-      onRefresh: _loadBalances,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // Account Grid
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 1.1,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _showOperationsBottomSheet(),
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Adjust'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF4285F4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
               ),
-              itemCount: _accounts.length,
-              itemBuilder: (context, index) {
-                final account = _accounts[index];
-                final balance = _balances[account.id] ?? 0.0;
-                return _buildAccountCard(account, balance);
-              },
-            ),
-            
-            const SizedBox(height: 32),
-            
-            // Transaction History Section
-            _buildTransactionHistory(),
-            
-            // Bottom padding for FAB
-            const SizedBox(height: 80),
-          ],
-        ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    _operationType = 'transfer';
+                    _showOperationsBottomSheet();
+                  },
+                  icon: const Icon(Icons.swap_horiz, size: 18),
+                  label: const Text('Transfer'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF4285F4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildAccountCard(Account account, double balance) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(int.parse(account.color)),
-            Color(int.parse(account.color)).withOpacity(0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Color(int.parse(account.color)).withOpacity(0.3),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE8EAED)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Account Icon
-            Text(
-              account.icon,
-              style: const TextStyle(fontSize: 24),
-            ),
-            const SizedBox(height: 4),
-            
-            // Account Name
-            Text(
-              account.name,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            
-            // Account Type
-            Text(
-              account.type,
-              style: TextStyle(
-                fontSize: 10,
-                color: Colors.white.withOpacity(0.8),
-              ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            
-            const SizedBox(height: 4),
-            
-            // Balance
-            Text(
-              '₹${balance.toStringAsFixed(0)}',
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showTransferDialog() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => TransferScreen(
-          accounts: _accounts,
-          balances: _balances,
-          onTransferComplete: _loadBalances,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTransactionHistory() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section Header
-        Text(
-          'Recent Transfers',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.deepPurple.shade800,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Latest account transfers',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 16),
-        
-        // Transfer List
-        if (_recentTransfers.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: Column(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const AccountHistoryScreen()),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Icon(
-                  Icons.swap_horiz,
-                  size: 48,
-                  color: Colors.grey.shade400,
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Color(int.parse(account.color)).withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      account.icon,
+                      style: const TextStyle(fontSize: 24),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        account.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF202124),
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        account.type,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Text(
-                  'No transfers yet',
-                  style: TextStyle(
+                  '₹${balance.toStringAsFixed(2)}',
+                  style: const TextStyle(
                     fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4285F4),
+                    letterSpacing: 0,
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Account transfers will appear here',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade500,
-                  ),
-                  textAlign: TextAlign.center,
                 ),
               ],
             ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _recentTransfers.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final transfer = _recentTransfers[index];
-              return _buildTransferCard(transfer);
-            },
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showOperationsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    _operationType == 'adjust' ? 'Adjust Balance' : 'Transfer Funds',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF202124),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Expanded(
+                  child: Form(
+                    key: _formKey,
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: _operationType == 'adjust' ? _buildAdjustForm() : _buildTransferForm(),
+                    ),
+                  ),
+                ),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.shade200,
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: _isSubmitting ? null : _submitOperation,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF4285F4),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      ),
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(
+                              _operationType == 'adjust' ? 'Apply Adjustment' : 'Transfer Money',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+        ),
+      ).then((_) {
+        _amountController.clear();
+        _reasonController.clear();
+        _noteController.clear();
+      });
+  }
+
+  Widget _buildAdjustForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDropdown('Account', _selectedAdjustmentAccount, _accounts, (value) => setState(() => _selectedAdjustmentAccount = value)),
+        if (_selectedAdjustmentAccount != null) _buildBalanceInfo(_balances[_selectedAdjustmentAccount] ?? 0.0),
+        const SizedBox(height: 24),
+        _buildTextField(_amountController, 'Amount', 'Enter amount', keyboardType: TextInputType.number),
+        const SizedBox(height: 24),
+        _buildTextField(_reasonController, 'Reason', 'Enter reason for adjustment', maxLines: 2),
       ],
     );
   }
 
-  Widget _buildTransferCard(AccountTransfer transfer) {
-    final fromAccount = _accounts.firstWhere(
-      (acc) => acc.id == transfer.fromAccountId,
-      orElse: () => _accounts.first,
+  Widget _buildTransferForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildDropdown('From', _selectedFromAccount, _accounts, (value) {
+          setState(() {
+            _selectedFromAccount = value;
+            _selectedToAccount = null;
+          });
+        }),
+        if (_selectedFromAccount != null) _buildBalanceInfo(_balances[_selectedFromAccount] ?? 0.0),
+        const SizedBox(height: 24),
+        _buildDropdown('To', _selectedToAccount, _availableToAccounts, (value) => setState(() => _selectedToAccount = value)),
+        const SizedBox(height: 24),
+        _buildTextField(_amountController, 'Amount', 'Enter amount', keyboardType: TextInputType.number),
+        const SizedBox(height: 24),
+        _buildTextField(_noteController, 'Note', 'Add a note', required: false),
+      ],
     );
-    final toAccount = _accounts.firstWhere(
-      (acc) => acc.id == transfer.toAccountId,
-      orElse: () => _accounts.first,
-    );
-    
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.shade100,
-            spreadRadius: 1,
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Transfer Icon
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+  }
+
+  Widget _buildBalanceInfo(double balance) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8F0FE),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, size: 18, color: Color(0xFF4285F4)),
+            const SizedBox(width: 8),
+            Text(
+              'Balance: ₹${balance.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF4285F4), fontWeight: FontWeight.w500),
             ),
-            child: const Center(
-              child: Icon(
-                Icons.swap_horiz,
-                color: Colors.blue,
-                size: 20,
-              ),
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Transfer Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Transfer: ${fromAccount.name} → ${toAccount.name}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'TRANSFER',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ),
-                    if (transfer.note?.isNotEmpty == true) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          transfer.note!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _formatTimestamp(transfer.timestamp),
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          // Amount
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '₹${transfer.amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue,
-                ),
-              ),
-              Text(
-                'TRANSFER',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.blue.withOpacity(0.7),
-                ),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-    
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'Just now';
-    }
-  }
-}
-
-class TransferScreen extends StatefulWidget {
-  final List<Account> accounts;
-  final Map<String, double> balances;
-  final VoidCallback onTransferComplete;
-
-  const TransferScreen({
-    super.key,
-    required this.accounts,
-    required this.balances,
-    required this.onTransferComplete,
-  });
-
-  @override
-  State<TransferScreen> createState() => _TransferScreenState();
-}
-
-class _TransferScreenState extends State<TransferScreen> {
-  final AccountBalanceService _accountService = AccountBalanceService();
-  final _formKey = GlobalKey<FormState>();
-  final _amountController = TextEditingController();
-  final _noteController = TextEditingController();
-
-  String? _selectedFromAccount;
-  String? _selectedToAccount;
-  bool _isLoading = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedFromAccount = widget.accounts.first.id;
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  void _onFromAccountChanged(String? value) {
-    setState(() {
-      _selectedFromAccount = value;
-      _selectedToAccount = null; // Reset destination account
-    });
-  }
-
-  List<Account> get _availableToAccounts {
-    return widget.accounts.where((account) => account.id != _selectedFromAccount).toList();
-  }
-
-  Account? get _fromAccount {
-    return widget.accounts.firstWhere(
-      (account) => account.id == _selectedFromAccount,
-      orElse: () => widget.accounts.first,
+  Widget _buildDropdown(String label, String? value, List<Account> items, ValueChanged<String?> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF5F6368)),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: value,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFFDADCE0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFFDADCE0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+          items: items.map((account) => DropdownMenuItem<String>(value: account.id, child: Text(account.name))).toList(),
+          onChanged: onChanged,
+        ),
+      ],
     );
   }
 
-  Account? get _toAccount {
-    return widget.accounts.firstWhere(
-      (account) => account.id == _selectedToAccount,
-      orElse: () => widget.accounts.first,
+  Widget _buildTextField(TextEditingController controller, String label, String hint, {int maxLines = 1, bool required = true, TextInputType? keyboardType}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF5F6368)),
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFFDADCE0)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFFDADCE0)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+            ),
+            hintText: hint,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          ),
+        ),
+      ],
     );
   }
 
-  double get _fromAccountBalance {
-    return widget.balances[_selectedFromAccount ?? ''] ?? 0.0;
-  }
-
-  Future<void> _performTransfer() async {
+  Future<void> _submitOperation() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount <= 0) {
-      _showErrorSnackBar('Please enter a valid amount');
-      return;
-    }
-
-    if (_selectedFromAccount == null || _selectedToAccount == null) {
-      _showErrorSnackBar('Please select both accounts');
-      return;
-    }
-
-    if (_fromAccountBalance < amount) {
-      _showErrorSnackBar('Insufficient balance in ${_fromAccount?.name}');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isSubmitting = true);
 
     try {
-      final success = await _accountService.transferBetweenAccounts(
-        fromAccountId: _selectedFromAccount!,
-        toAccountId: _selectedToAccount!,
-        amount: amount,
-        note: _noteController.text.trim().isNotEmpty ? _noteController.text.trim() : null,
-      );
-
-      if (success) {
-        widget.onTransferComplete();
-        Navigator.pop(context);
-        _showSuccessSnackBar('₹${amount.toStringAsFixed(2)} transferred successfully');
+      bool success = false;
+      if (_operationType == 'adjust') {
+        success = await _accountService.adjustAccountBalance(
+          accountId: _selectedAdjustmentAccount!,
+          adjustmentAmount: double.parse(_amountController.text),
+          reason: _reasonController.text.trim(),
+        );
+        if (success && mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Balance adjusted successfully'), backgroundColor: Colors.green),
+          );
+        }
       } else {
-        _showErrorSnackBar('Transfer failed. Please try again.');
-      }
-    } catch (e) {
-      _showErrorSnackBar('Transfer failed. Please try again.');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Transfer Money'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade50,
-              Colors.white,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Text(
-                    'Transfer Between Accounts',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Move money between your accounts',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // From Account
-                  const Text(
-                    'From Account',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _selectedFromAccount,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    items: widget.accounts.map((account) {
-                      return DropdownMenuItem<String>(
-                        value: account.id,
-                        child: Tooltip(
-                          message: '${account.name} (${account.type})',
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(account.icon),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  account.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: _onFromAccountChanged,
-                    validator: (value) {
-                      if (value == null) return 'Please select source account';
-                      return null;
-                    },
-                  ),
-                  
-                  // Available Balance
-                  if (_selectedFromAccount != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Available: ₹${_fromAccountBalance.toStringAsFixed(2)}',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                  
-                  const SizedBox(height: 24),
-
-                  // To Account
-                  const Text(
-                    'To Account',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    value: _selectedToAccount,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                    ),
-                    items: _availableToAccounts.map((account) {
-                      return DropdownMenuItem<String>(
-                        value: account.id,
-                        child: Tooltip(
-                          message: '${account.name} (${account.type})',
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(account.icon),
-                              const SizedBox(width: 6),
-                              Flexible(
-                                child: Text(
-                                  account.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedToAccount = value;
-                      });
-                    },
-                    validator: (value) {
-                      if (value == null) return 'Please select destination account';
-                      return null;
-                    },
-                  ),
-                  
-                  const SizedBox(height: 24),
-
-                  // Amount
-                  const Text(
-                    'Amount',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                    ],
-                    decoration: InputDecoration(
-                      prefixText: '₹ ',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      hintText: 'Enter amount',
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter amount';
-                      }
-                      final amount = double.tryParse(value);
-                      if (amount == null || amount <= 0) {
-                        return 'Please enter a valid amount';
-                      }
-                      if (amount > _fromAccountBalance) {
-                        return 'Amount exceeds available balance';
-                      }
-                      return null;
-                    },
-                  ),
-                  
-                  const SizedBox(height: 24),
-
-                  // Note
-                  const Text(
-                    'Note (Optional)',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _noteController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      hintText: 'Add a note for this transfer',
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 32),
-
-                  // Transfer Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _performTransfer,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text(
-                              'Transfer Money',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                    ),
-                  ),
-                ],
-              ),
+        success = await _accountService.transferBetweenAccounts(
+          fromAccountId: _selectedFromAccount!,
+          toAccountId: _selectedToAccount!,
+          amount: double.parse(_amountController.text),
+          note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+        );
+        if (success && mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('₹${double.parse(_amountController.text).toStringAsFixed(2)} transferred successfully'),
+              backgroundColor: Colors.green,
             ),
-          ),
-        ),
-      ),
-    );
+          );
+        }
+      }
+      await _loadBalances();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Operation failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 }

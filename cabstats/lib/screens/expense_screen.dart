@@ -22,11 +22,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   DateTime _selectedDate = DateTime.now();
   
   List<Account> _accounts = [];
-  List<LedgerEntry> _expenseHistory = [];
   Map<String, double> _accountBalances = {};
   bool _isLoading = false;
   bool _isSubmitting = false;
-  bool _isRefreshing = false;
 
   // Expense categories with their icons
   final Map<TransactionCategory, IconData> _categoryIcons = {
@@ -44,6 +42,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     TransactionCategory.withdrawal: Icons.account_balance_wallet,
     TransactionCategory.saving: Icons.savings,
     TransactionCategory.rent: Icons.home,
+    TransactionCategory.tireMaintenance: Icons.build_circle,
     TransactionCategory.otherFee: Icons.more_horiz,
   };
 
@@ -60,13 +59,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Future<void> _loadInitialData() async {
     try {
-      // Load in parallel for better performance
-      await Future.wait([
-        _loadAccountBalances(),
-        _loadExpenseHistory(),
-      ]);
+      await _loadAccountBalances();
       
-      // Trigger a rebuild to show the data
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -118,8 +112,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         return 'Saving';
       case TransactionCategory.rent:
         return 'Rent';
+      case TransactionCategory.tireMaintenance:
+        return 'Tire Maintenance';
       case TransactionCategory.otherFee:
-        return 'Other Fee';
+        return 'Miscellaneous';
       case TransactionCategory.paymentReceived:
         return 'Payment Received';
       case TransactionCategory.rideStart:
@@ -149,40 +145,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  Future<void> _loadExpenseHistory() async {
-    try {
-      final ledgerEntries = await _accountService.getAllLedgerEntries();
-      final expenseEntries = ledgerEntries
-          .where((entry) => entry.nature == TransactionNature.expense)
-          .toList();
-      
-      // Sort by timestamp (newest first)
-      expenseEntries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
-      _expenseHistory = expenseEntries;
-    } catch (e) {
-      print('Error loading expense history: $e');
-      // Don't show snackbar here as it's handled by _loadInitialData()
-    }
-  }
-
   Future<void> _refreshData() async {
-    if (_isRefreshing) return; // Prevent multiple simultaneous refreshes
-    
     if (mounted) {
       setState(() {
-        _isRefreshing = true;
         _isLoading = true;
       });
     }
     
     await _loadInitialData();
-    
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-      });
-    }
   }
 
   Future<void> _submitExpense() async {
@@ -197,7 +167,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return;
     }
 
-    if (_isSubmitting || _isRefreshing) return; // Prevent submission during operations
+    if (_isSubmitting) return; // Prevent submission during operations
 
     setState(() {
       _isSubmitting = true;
@@ -248,7 +218,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _selectedCategory = null;
         _selectedDate = DateTime.now();
         
-        // Reload expense history and account balances
+        // Reload account balances
         await _refreshData();
         
         ScaffoldMessenger.of(context).showSnackBar(
@@ -284,22 +254,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return Scaffold(
       key: const ValueKey('expense_screen'),
       appBar: AppBar(
-        title: const Text('Expense Management'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade50,
-              Colors.white,
-            ],
+        title: const Text(
+          'Add Expense',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0,
+            color: Color(0xFF202124),
           ),
         ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF202124),
+        elevation: 0,
+        surfaceTintColor: const Color(0xFFE8EAED),
+      ),
+      body: Container(
+        color: const Color(0xFFF8F9FA),
         child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refreshData,
@@ -309,53 +279,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header
-                  Text(
-                    'Add New Expense',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.deepPurple.shade800,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Track your business expenses',
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
                   // Expense Form
                   _buildExpenseForm(),
-                  
-                  const SizedBox(height: 32),
-                  
-                  // Expense History Header
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Expense History',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple.shade800,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: _refreshData,
-                        icon: const Icon(Icons.refresh),
-                        tooltip: 'Refresh',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Expense History List
-                  _buildExpenseHistory(),
                 ],
               ),
             ),
@@ -367,18 +292,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _buildExpenseForm() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.deepPurple.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: const Color(0xFFE8EAED)),
       ),
       child: Form(
         key: _formKey,
@@ -389,9 +307,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             Text(
               'Account',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.deepPurple.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 8),
@@ -400,12 +319,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               value: _selectedAccountId,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8F9FA),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               hint: const Text('Select Account'),
               items: _accounts.map((account) {
@@ -438,9 +365,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             Text(
               'Category',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.deepPurple.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 8),
@@ -449,12 +377,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               value: _selectedCategory,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8F9FA),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               ),
               hint: const Text('Select Category'),
               items: TransactionCategory.values
@@ -486,26 +422,35 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             Text(
               'Amount',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.deepPurple.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 8),
             TextFormField(
               controller: _amountController,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
+              keyboardType: TextInputType.number,
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
               decoration: InputDecoration(
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8F9FA),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 prefixText: '₹ ',
                 hintText: '0.00',
               ),
@@ -527,9 +472,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             Text(
               'Description (Optional)',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.deepPurple.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 8),
@@ -537,12 +483,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               controller: _descriptionController,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFFDADCE0)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: const BorderSide(color: Color(0xFF4285F4), width: 2),
+                ),
+                filled: true,
+                fillColor: const Color(0xFFF8F9FA),
+                contentPadding: const EdgeInsets.all(16),
                 hintText: 'Add notes about this expense',
               ),
               maxLines: 2,
@@ -554,9 +508,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             Text(
               'Date',
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.deepPurple.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.grey.shade700,
+                letterSpacing: 0,
               ),
             ),
             const SizedBox(height: 8),
@@ -575,25 +530,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFFF8F9FA),
+                  border: Border.all(color: const Color(0xFFDADCE0)),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.calendar_today,
-                      color: Colors.deepPurple,
+                      color: Color(0xFF4285F4),
                       size: 20,
                     ),
                     const SizedBox(width: 12),
                     Text(
                       '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                      style: const TextStyle(fontSize: 16),
+                      style: const TextStyle(fontSize: 15),
                     ),
                   ],
                 ),
@@ -605,14 +558,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             // Submit Button
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: FilledButton(
                 onPressed: _isSubmitting ? null : _submitExpense,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF4285F4),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                 ),
                 child: _isSubmitting
@@ -627,8 +580,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     : const Text(
                         'Record Expense',
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0,
                         ),
                       ),
               ),
@@ -639,159 +593,4 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildExpenseHistory() {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (_expenseHistory.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.deepPurple.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(
-              Icons.receipt_long,
-              size: 64,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No expenses recorded yet',
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey.shade600,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Start recording your expenses to see them here',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade500,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _expenseHistory.length,
-      itemBuilder: (context, index) {
-        final expense = _expenseHistory[index];
-        final account = _accounts.firstWhere(
-          (a) => a.id == expense.accountId,
-          orElse: () => _accounts.first,
-        );
-        
-        return Container(
-          key: ValueKey(expense.id),
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.deepPurple.withOpacity(0.1),
-                spreadRadius: 1,
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              // Category Icon
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  _categoryIcons[expense.category] ?? Icons.receipt,
-                  color: Colors.deepPurple,
-                  size: 24,
-                ),
-              ),
-              
-              const SizedBox(width: 16),
-              
-              // Expense Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _getCategoryDisplayName(expense.category),
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      account.name,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    if (expense.description.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        expense.description,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    Text(
-                      expense.formattedTimestamp,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade400,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Amount
-              Text(
-                expense.formattedAmount,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.red.shade600,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }

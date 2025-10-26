@@ -20,6 +20,7 @@ enum TransactionCategory {
   withdrawal,
   saving,
   rent,
+  tireMaintenance,
   otherFee,
   paymentReceived,
   rideStart,
@@ -143,8 +144,10 @@ class LedgerEntry {
         return 'Saving';
       case TransactionCategory.rent:
         return 'Rent';
+      case TransactionCategory.tireMaintenance:
+        return 'Tire Maintenance';
       case TransactionCategory.otherFee:
-        return 'Other Fee';
+        return 'Miscellaneous';
       case TransactionCategory.paymentReceived:
         return 'Payment Received';
       case TransactionCategory.rideStart:

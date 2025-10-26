@@ -175,48 +175,6 @@ class AccountBalanceService {
     }
   }
 
-  // Get multiple account balances efficiently using batch query
-  Future<Map<String, double>> getMultipleAccountBalances(List<String> accountIds) async {
-    try {
-      if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
-        return {};
-      }
-
-      if (accountIds.isEmpty) return {};
-
-      // Use Firestore's whereIn for efficient batch querying (max 10 items)
-      final Map<String, double> balances = {};
-      
-      // Process in batches of 10 (Firestore limit)
-      for (int i = 0; i < accountIds.length; i += 10) {
-        final batch = accountIds.skip(i).take(10).toList();
-        
-        final snapshot = await _balancesRef
-            .where(FieldPath.documentId, whereIn: batch)
-            .get();
-
-        for (final doc in snapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          balances[doc.id] = (data['balance'] as num?)?.toDouble() ?? 0.0;
-        }
-      }
-
-      // Ensure all requested accounts exist (create missing ones)
-      for (final accountId in accountIds) {
-        if (!balances.containsKey(accountId)) {
-          await ensureAccountBalanceExists(accountId);
-          balances[accountId] = 0.0;
-        }
-      }
-
-      return balances;
-    } catch (e) {
-      print('❌ Error getting multiple account balances: $e');
-      return {};
-    }
-  }
-
   // Get all account balances
   Future<List<Map<String, dynamic>>> getAllAccountBalances() async {
     try {
@@ -348,10 +306,6 @@ class AccountBalanceService {
         return false;
       }
 
-      // Ensure both accounts exist before transfer
-      await ensureAccountBalanceExists(fromAccountId);
-      await ensureAccountBalanceExists(toAccountId);
-
       // Check if source account has sufficient balance
       final fromBalance = await getAccountBalance(fromAccountId);
       if (fromBalance < amount) {
@@ -361,35 +315,31 @@ class AccountBalanceService {
 
       print('💸 Transferring ₹${amount.toStringAsFixed(2)} from $fromAccountId to $toAccountId');
 
-      // Use Firestore transaction for atomicity
-      return await _firestore.runTransaction<bool>((transaction) async {
-        // Create transfer record
-        final transferId = _transfersRef.doc().id;
-        final transfer = AccountTransfer(
-          id: transferId,
-          fromAccountId: fromAccountId,
-          toAccountId: toAccountId,
-          amount: amount,
-          note: note,
-          timestamp: DateTime.now(),
-        );
+      // Create transfer record
+      final transferId = _transfersRef.doc().id;
+      final transfer = AccountTransfer(
+        id: transferId,
+        fromAccountId: fromAccountId,
+        toAccountId: toAccountId,
+        amount: amount,
+        note: note,
+        timestamp: DateTime.now(),
+      );
 
-        // Add all operations to the transaction
-        transaction.set(_transfersRef.doc(transferId), transfer.toJson());
-        
-        transaction.update(_balancesRef.doc(fromAccountId), {
-          'balance': FieldValue.increment(-amount),
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
+      // Save transfer record
+      await _transfersRef.doc(transferId).set(transfer.toJson());
 
-        transaction.update(_balancesRef.doc(toAccountId), {
-          'balance': FieldValue.increment(amount),
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
-
-        print('✅ Transfer transaction prepared successfully');
-        return true;
+      // Update account balances directly (no ledger entries needed)
+      await _balancesRef.doc(fromAccountId).update({
+        'balance': FieldValue.increment(-amount),
       });
+
+      await _balancesRef.doc(toAccountId).update({
+        'balance': FieldValue.increment(amount),
+      });
+
+      print('✅ Transfer completed successfully');
+      return true;
     } catch (e) {
       print('❌ Error transferring between accounts: $e');
       return false;
@@ -477,125 +427,6 @@ class AccountBalanceService {
       return true;
     } catch (e) {
       print('Error processing ride transactions: $e');
-      return false;
-    }
-  }
-
-  // Process ride transactions atomically (for ride updates)
-  Future<bool> processRideTransactionsAtomically({
-    required String rideId,
-    required Map<String, double> feeDeductions,
-    required Map<String, double> paymentCredits,
-    required Map<String, dynamic> rideData,
-    double? fuelAllocation,
-  }) async {
-    try {
-      if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
-        return false;
-      }
-
-      print('🔄 Processing ride transactions atomically for ride: $rideId');
-
-      // Use Firestore transaction for atomicity
-      return await _firestore.runTransaction<bool>((transaction) async {
-        // 1. Reverse old transactions (delete ledger entries)
-        final oldLedgerEntries = await _ledgerRef
-            .where('rideId', isEqualTo: rideId)
-            .get();
-
-        for (final doc in oldLedgerEntries.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final ledgerEntry = LedgerEntry.fromJson(data);
-          
-          // Reverse balance changes
-          double adjustmentAmount;
-          if (ledgerEntry.type == TransactionType.debit) {
-            adjustmentAmount = ledgerEntry.amount;
-          } else {
-            adjustmentAmount = -ledgerEntry.amount;
-          }
-
-          transaction.update(_balancesRef.doc(ledgerEntry.accountId), {
-            'balance': FieldValue.increment(adjustmentAmount),
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
-
-          // Delete old ledger entry
-          transaction.delete(doc.reference);
-        }
-
-        // 2. Update ride document
-        transaction.update(_firestore.collection('users').doc(_currentUserId!).collection('rides').doc(rideId), rideData);
-
-        // 3. Process fee deductions
-        for (final entry in feeDeductions.entries) {
-          if (entry.value > 0) {
-            await ensureAccountBalanceExists(entry.key);
-            
-            final ledgerDocRef = _ledgerRef.doc();
-            final ledgerEntry = LedgerEntry(
-              id: ledgerDocRef.id,
-              accountId: entry.key,
-              rideId: rideId,
-              amount: entry.value,
-              type: TransactionType.debit,
-              category: TransactionCategory.tollFee, // Default, will be updated based on fee type
-              nature: TransactionNature.expense,
-              description: 'Ride fee deduction',
-              timestamp: DateTime.now(),
-            );
-            
-            transaction.set(ledgerDocRef, ledgerEntry.toJson());
-            transaction.update(_balancesRef.doc(entry.key), {
-              'balance': FieldValue.increment(-entry.value),
-              'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-            });
-          }
-        }
-
-        // 4. Process payment credits
-        for (final entry in paymentCredits.entries) {
-          if (entry.value > 0) {
-            await ensureAccountBalanceExists(entry.key);
-            
-            final ledgerDocRef = _ledgerRef.doc();
-            final ledgerEntry = LedgerEntry(
-              id: ledgerDocRef.id,
-              accountId: entry.key,
-              rideId: rideId,
-              amount: entry.value,
-              type: TransactionType.credit,
-              category: TransactionCategory.paymentReceived,
-              nature: TransactionNature.earning,
-              description: 'Ride payment received',
-              timestamp: DateTime.now(),
-            );
-            
-            transaction.set(ledgerDocRef, ledgerEntry.toJson());
-            transaction.update(_balancesRef.doc(entry.key), {
-              'balance': FieldValue.increment(entry.value),
-              'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-            });
-          }
-        }
-
-        // 5. Add fuel allocation if provided
-        if (fuelAllocation != null && fuelAllocation > 0) {
-          final fuelDocRef = _pendingFuelAllocationRef.doc('current');
-          transaction.set(fuelDocRef, {
-            'id': 'current',
-            'amount': FieldValue.increment(fuelAllocation),
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-            'rideIds': FieldValue.arrayUnion([rideId]),
-          }, SetOptions(merge: true));
-        }
-
-        print('✅ Ride transaction processed atomically for ride: $rideId');
-        return true;
-      });
-    } catch (e) {
-      print('❌ Error processing ride transactions atomically: $e');
       return false;
     }
   }
@@ -803,9 +634,6 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      // Ensure axis_bank (Fuel Reserve) account exists
-      await ensureAccountBalanceExists('axis_bank');
-      
       // Transfer to axis_bank (Fuel Reserve)
       final success = await transferBetweenAccounts(
         fromAccountId: fromAccountId,
@@ -928,48 +756,36 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      // Ensure axis_bank (Fuel Reserve) account exists
-      await ensureAccountBalanceExists('axis_bank');
-      
       final timestamp = DateTime.now();
       
-      // Use Firestore transaction for atomicity
-      return await _firestore.runTransaction<bool>((transaction) async {
-        // 1. Add to refuels collection
-        final refuelDocRef = _refuelsRef.doc();
-        transaction.set(refuelDocRef, {
-          'cost': cost,
-          'kilometers': kilometers,
-          'timestamp': timestamp.millisecondsSinceEpoch,
-          'location': location,
-          'notes': notes,
-        });
-        
-        // 2. Add to ledger as expense
-        final ledgerDocRef = _ledgerRef.doc();
-        final ledgerEntry = LedgerEntry(
-          id: ledgerDocRef.id,
-          accountId: 'axis_bank', // Fuel Reserve account
-          rideId: 'refuel_${timestamp.millisecondsSinceEpoch}', // Unique refuel ID
-          amount: cost, // Positive amount for debit transaction
-          type: TransactionType.debit,
-          category: TransactionCategory.fuel,
-          nature: TransactionNature.expense,
-          description: 'Refuel - ${kilometers.toStringAsFixed(0)} km${location != null ? ' at $location' : ''}',
-          timestamp: timestamp,
-        );
-        
-        transaction.set(ledgerDocRef, ledgerEntry.toJson());
-        
-        // 3. Update account balance
-        transaction.update(_balancesRef.doc('axis_bank'), {
-          'balance': FieldValue.increment(-cost), // Subtract from fuel reserve
-          'lastUpdated': timestamp.millisecondsSinceEpoch,
-        });
-        
-        print('✅ Refuel transaction prepared: ₹$cost for ${kilometers.toStringAsFixed(0)} km');
-        return true;
+      // 1. Add to refuels collection
+      final refuelDoc = await _refuelsRef.add({
+        'cost': cost,
+        'kilometers': kilometers,
+        'timestamp': timestamp.millisecondsSinceEpoch,
+        'location': location,
+        'notes': notes,
       });
+      
+      // 2. Add to ledger as expense
+      final ledgerSuccess = await addTransaction(
+        accountId: 'axis_bank', // Fuel Reserve account
+        rideId: 'refuel_${timestamp.millisecondsSinceEpoch}', // Unique refuel ID
+        amount: -cost, // Negative for expense
+        type: TransactionType.debit,
+        category: TransactionCategory.fuel,
+        nature: TransactionNature.expense,
+        description: 'Refuel - ${kilometers.toStringAsFixed(0)} km${location != null ? ' at $location' : ''}',
+      );
+      
+      if (!ledgerSuccess) {
+        // If ledger fails, delete the refuel record
+        await refuelDoc.delete();
+        return false;
+      }
+      
+      print('✅ Added refuel record: ₹$cost for ${kilometers.toStringAsFixed(0)} km');
+      return true;
     } catch (e) {
       print('❌ Error adding refuel record: $e');
       return false;
@@ -1147,7 +963,7 @@ class AccountBalanceService {
     }
   }
 
-  // Initialize all account balances if they don't exist
+  // Initialize all account balances for the current user
   Future<bool> initializeAllAccountBalances() async {
     try {
       if (_currentUserId == null) {
@@ -1155,30 +971,369 @@ class AccountBalanceService {
         return false;
       }
 
-      print('🔄 Initializing all account balances...');
-      
+      print('🔄 Initializing all account balances for user $_currentUserId');
+
       final accounts = Account.getSampleAccounts();
-      bool allInitialized = true;
+      final batch = _firestore.batch();
 
       for (final account in accounts) {
-        try {
-          await ensureAccountBalanceExists(account.id);
-          print('✅ Account ${account.name} initialized');
-        } catch (e) {
-          print('❌ Failed to initialize account ${account.name}: $e');
-          allInitialized = false;
+        final docRef = _balancesRef.doc(account.id);
+        
+        // Check if document already exists
+        final doc = await docRef.get();
+        
+        if (!doc.exists) {
+          batch.set(docRef, {
+            'accountId': account.id,
+            'accountName': account.name,
+            'accountType': account.type,
+            'balance': 0.0,
+            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
+          });
+          print('📝 Creating account balance for ${account.name}');
         }
       }
 
-      if (allInitialized) {
-        print('✅ All account balances initialized successfully');
-      } else {
-        print('⚠️ Some account balances failed to initialize');
-      }
-
-      return allInitialized;
+      await batch.commit();
+      print('✅ Initialized all account balances');
+      return true;
     } catch (e) {
       print('❌ Error initializing account balances: $e');
+      return false;
+    }
+  }
+
+  // Get multiple account balances at once
+  Future<Map<String, double>> getMultipleAccountBalances(List<String> accountIds) async {
+    try {
+      if (_currentUserId == null) {
+        print('❌ AccountBalanceService: User not authenticated');
+        return {};
+      }
+
+      print('📊 Fetching multiple account balances: ${accountIds.length} accounts');
+
+      final balances = <String, double>{};
+      
+      // Fetch all accounts in parallel
+      final futures = accountIds.map((accountId) async {
+        final balance = await getAccountBalance(accountId);
+        return {accountId: balance};
+      });
+
+      final results = await Future.wait(futures);
+      
+      for (final result in results) {
+        balances.addAll(result);
+      }
+
+      print('✅ Retrieved ${balances.length} account balances');
+      return balances;
+    } catch (e) {
+      print('❌ Error fetching multiple account balances: $e');
+      return {};
+    }
+  }
+
+  // Process ride transactions atomically (for ride updates)
+  Future<bool> processRideTransactionsAtomically({
+    required String rideId,
+    required Map<String, double> feeDeductions,
+    required Map<String, double> paymentCredits,
+    required Map<String, dynamic> rideData,
+    double? fuelAllocation,
+  }) async {
+    try {
+      if (_currentUserId == null) {
+        print('❌ AccountBalanceService: User not authenticated');
+        return false;
+      }
+
+      print('🔄 Processing ride transactions atomically for ride: $rideId');
+
+      return await _firestore.runTransaction<bool>((transaction) async {
+        // First, reverse old transactions
+        await reverseRideTransactions(rideId);
+
+        // Then, create new transactions
+        final timestamp = DateTime.now();
+
+        // 1. Process payment credits (credits)
+        for (final entry in paymentCredits.entries) {
+          final accountId = entry.key;
+          final amount = entry.value;
+          
+          // Ensure account balance exists
+          await ensureAccountBalanceExists(accountId);
+          
+          transaction.set(_ledgerRef.doc('${timestamp.millisecondsSinceEpoch}_${accountId}_credit'), {
+            'id': '${timestamp.millisecondsSinceEpoch}_${accountId}_credit',
+            'accountId': accountId,
+            'rideId': rideId,
+            'type': 'credit',
+            'category': 'paymentReceived',
+            'nature': 'earning',
+            'amount': amount,
+            'description': 'Payment received from ride',
+            'timestamp': timestamp.millisecondsSinceEpoch,
+            'reference': rideId,
+          });
+
+          transaction.update(_balancesRef.doc(accountId), {
+            'balance': FieldValue.increment(amount),
+            'lastUpdated': timestamp.millisecondsSinceEpoch,
+          });
+        }
+
+        // 2. Process fee deductions (debits)
+        final feeCategories = {
+          'axis_bank': 'tollFee',           // Toll fee account
+          'hdfc_bank': 'platformFee',       // Platform fee account
+          'icici_bank': 'otherFee',         // Other fee account
+          'upi': 'airportFee',             // Airport fee account (or other)
+        };
+
+        for (final entry in feeDeductions.entries) {
+          final accountId = entry.key;
+          final amount = entry.value;
+          final category = feeCategories[accountId] ?? 'otherFee';
+
+          transaction.set(_ledgerRef.doc('${timestamp.millisecondsSinceEpoch}_${accountId}_${category}'), {
+            'id': '${timestamp.millisecondsSinceEpoch}_${accountId}_${category}',
+            'accountId': accountId,
+            'rideId': rideId,
+            'type': 'debit',
+            'category': category,
+            'nature': 'expense',
+            'amount': amount,
+            'description': 'Ride fee',
+            'timestamp': timestamp.millisecondsSinceEpoch,
+            'reference': rideId,
+          });
+
+          transaction.update(_balancesRef.doc(accountId), {
+            'balance': FieldValue.increment(-amount),
+            'lastUpdated': timestamp.millisecondsSinceEpoch,
+          });
+        }
+
+        // 3. Update ride document
+        transaction.set(
+          _firestore.collection('users').doc(_currentUserId).collection('rides').doc(rideId),
+          rideData,
+          SetOptions(merge: true),
+        );
+
+        // 4. Process fuel allocation if provided
+        if (fuelAllocation != null && fuelAllocation > 0) {
+          final fuelDocRef = _pendingFuelAllocationRef.doc('current');
+          transaction.set(fuelDocRef, {
+            'id': 'current',
+            'amount': FieldValue.increment(fuelAllocation),
+            'lastUpdated': timestamp.millisecondsSinceEpoch,
+            'rideIds': FieldValue.arrayUnion([rideId]),
+          }, SetOptions(merge: true));
+        }
+
+        print('✅ Ride transaction processed atomically for ride: $rideId');
+        return true;
+      });
+    } catch (e) {
+      print('❌ Error processing ride transactions atomically: $e');
+      return false;
+    }
+  }
+
+  // Adjust account balance manually
+  Future<bool> adjustAccountBalance({
+    required String accountId,
+    required double adjustmentAmount,
+    required String reason,
+  }) async {
+    try {
+      if (_currentUserId == null) {
+        print('❌ AccountBalanceService: User not authenticated');
+        return false;
+      }
+
+      print('📊 Adjusting balance for account $accountId by ₹${adjustmentAmount.toStringAsFixed(2)}');
+
+      // Update balance
+      await _balancesRef.doc(accountId).update({
+        'balance': FieldValue.increment(adjustmentAmount),
+        'lastUpdated': DateTime.now().millisecondsSinceEpoch,
+      });
+
+      // Create ledger entry for audit
+      final ledgerId = _ledgerRef.doc().id;
+      final ledgerEntry = LedgerEntry(
+        id: ledgerId,
+        accountId: accountId,
+        rideId: '', // Empty for manual adjustments
+        type: adjustmentAmount > 0 ? TransactionType.credit : TransactionType.debit,
+        category: TransactionCategory.adjustment,
+        nature: TransactionNature.adjustment,
+        amount: adjustmentAmount.abs(),
+        description: reason,
+        timestamp: DateTime.now(),
+      );
+
+      await _ledgerRef.doc(ledgerId).set(ledgerEntry.toJson());
+
+      print('✅ Balance adjusted successfully');
+      return true;
+    } catch (e) {
+      print('❌ Error adjusting account balance: $e');
+      return false;
+    }
+  }
+
+  // Get all account transactions (ledger + transfers) with unified format
+  Future<List<Map<String, dynamic>>> getAllAccountTransactions() async {
+    try {
+      if (_currentUserId == null) {
+        print('❌ AccountBalanceService: User not authenticated');
+        return [];
+      }
+
+      print('📝 Fetching all account transactions');
+
+      // Fetch all ledger entries
+      final ledgerSnapshot = await _ledgerRef.get();
+      List<Map<String, dynamic>> transactions = [];
+
+      for (final doc in ledgerSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        data['transactionType'] = 'ledger';
+        transactions.add(data);
+      }
+
+      // Fetch all transfers
+      final transfersSnapshot = await _transfersRef.get();
+      for (final doc in transfersSnapshot.docs) {
+        final transferData = doc.data() as Map<String, dynamic>;
+        final fromAccount = transferData['fromAccountId'];
+        final toAccount = transferData['toAccountId'];
+        final amount = transferData['amount'] as num;
+        final timestamp = transferData['timestamp'] as int;
+        final note = transferData['note'];
+        
+        // Add as two separate transactions (debit from source, credit to destination)
+        transactions.add({
+          'id': '${doc.id}_from',
+          'type': 'debit',
+          'accountId': fromAccount,
+          'amount': amount.toDouble(),
+          'description': 'Transfer to ${Account.getSampleAccounts().firstWhere((a) => a.id == toAccount).name}',
+          'timestamp': timestamp,
+          'transactionType': 'transfer',
+          'nature': 'transfer',
+          'reference': doc.id,
+          'note': note,
+        });
+
+        transactions.add({
+          'id': '${doc.id}_to',
+          'type': 'credit',
+          'accountId': toAccount,
+          'amount': amount.toDouble(),
+          'description': 'Transfer from ${Account.getSampleAccounts().firstWhere((a) => a.id == fromAccount).name}',
+          'timestamp': timestamp,
+          'transactionType': 'transfer',
+          'nature': 'transfer',
+          'reference': doc.id,
+          'note': note,
+        });
+      }
+
+      // Sort by timestamp descending
+      transactions.sort((a, b) {
+        final timestampA = a['timestamp'] as int;
+        final timestampB = b['timestamp'] as int;
+        return timestampB.compareTo(timestampA);
+      });
+
+      print('✅ Retrieved ${transactions.length} transactions');
+      return transactions;
+    } catch (e) {
+      print('❌ Error fetching all account transactions: $e');
+      return [];
+    }
+  }
+
+  // Delete a transaction and reverse balance changes
+  Future<bool> deleteTransaction({
+    required String transactionId,
+    required String transactionType,
+  }) async {
+    try {
+      if (_currentUserId == null) {
+        print('❌ AccountBalanceService: User not authenticated');
+        return false;
+      }
+
+      print('🗑️ Deleting transaction: $transactionId (type: $transactionType)');
+
+      if (transactionType == 'ledger') {
+        // Load ledger entry
+        final doc = await _ledgerRef.doc(transactionId).get();
+        if (!doc.exists) {
+          print('Transaction not found');
+          return false;
+        }
+
+        final data = doc.data() as Map<String, dynamic>;
+        final accountId = data['accountId'] as String;
+        final amount = (data['amount'] as num).toDouble();
+        final type = data['type'] as String;
+
+        // Reverse the balance change
+        final reverseAmount = type == 'credit' ? -amount : amount;
+        await _balancesRef.doc(accountId).update({
+          'balance': FieldValue.increment(reverseAmount),
+        });
+
+        // Delete ledger entry
+        await _ledgerRef.doc(transactionId).delete();
+        print('✅ Deleted ledger entry and reversed balance');
+        return true;
+
+      } else if (transactionType == 'transfer') {
+        // For transfers, we need to handle both sides
+        // Extract the base ID from transactionId (remove _from or _to suffix)
+        final baseId = transactionId.replaceAll(RegExp(r'_(from|to)$'), '');
+        
+        // Load the full transfer document
+        final transferDoc = await _transfersRef.doc(baseId).get();
+        if (!transferDoc.exists) {
+          print('Transfer not found');
+          return false;
+        }
+
+        final transferData = transferDoc.data() as Map<String, dynamic>;
+        final fromAccount = transferData['fromAccountId'] as String;
+        final toAccount = transferData['toAccountId'] as String;
+        final amount = (transferData['amount'] as num).toDouble();
+
+        // Reverse both accounts
+        await _balancesRef.doc(fromAccount).update({
+          'balance': FieldValue.increment(amount),
+        });
+        
+        await _balancesRef.doc(toAccount).update({
+          'balance': FieldValue.increment(-amount),
+        });
+
+        // Delete transfer document
+        await _transfersRef.doc(baseId).delete();
+        print('✅ Deleted transfer and reversed balances');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ Error deleting transaction: $e');
       return false;
     }
   }

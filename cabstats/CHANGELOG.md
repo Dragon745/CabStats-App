@@ -5,9 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] - 2025-10-26
 
 ### Added
+
+- **HomeScreen Dashboard Google Material Design Redesign**: Complete UI overhaul following Material Design 3 principles
+
+  - **Google Material Design 3 UI**: Redesigned home dashboard to match Google's design language
+    - Clean, minimal cards with flat design and subtle borders (`#E8EAED`)
+    - White AppBar with surface tint and Material typography
+    - Light grey background (`#F8F9FA`)
+    - Ride cards with solid color backgrounds (blue `#4285F4`, green `#10B981`, orange `#FB8500`)
+    - Icon containers with rounded corners and transparency overlays
+    - Material FilledButtons and OutlinedButtons with 24px border radius
+    - Consistent 12px border radius throughout
+    - Zero elevation, flat Material design
+    - Refined typography with proper letter spacing (0, -0.5, -1)
+    - Clean spacing (16px, 12px, 8px)
+  - **Account Balance Card**: Material Design 3 styling
+    - White card with light grey border
+    - 36px balance text with weight 400
+    - IconButtons with light grey backgrounds
+    - Account breakdown with colored icon containers (8% opacity)
+    - Blue balance text (`#4285F4`)
+
+- **Accounts Screen Google Material Design Redesign**: Complete UI overhaul following Material Design 3 principles
+
+  - **Google Material Design 3 UI**: Redesigned accounts screen to match Google's design language
+    - Clean, minimal cards with flat design and subtle borders (`#E8EAED`)
+    - White FilledButtons with blue text for primary actions
+    - Total balance card with blue background (`#4285F4`) and refined typography
+    - Account cards with icon containers using 8% opacity backgrounds
+    - Consistent 12px border radius throughout
+    - Zero elevation, flat Material design
+    - Refined typography with proper letter spacing
+    - Clean spacing and padding (16px, 8px spacing)
+  - **Menu Drawer Redesign**: Google Material Design 3 styling throughout
+    - Light grey background (`#F8F9FA`)
+    - Blue header section (`#4285F4`) with white text
+    - Material ripple effects with InkWell
+    - Icon containers with blue tinted backgrounds
+    - Destructive actions styled in red and orange
+    - Proper dividers between sections
+
+- **Accounts Screen Corporate Redesign and Transaction History**: Complete accounts management overhaul
+
+  - **Corporate Banking UI**: Professional redesign of accounts screen with vertical card layout
+    - Removed transaction history section from main accounts screen
+    - Removed floating action button for transfers
+    - Corporate banking aesthetic with white cards, subtle shadows, and borders
+    - Total balance card displaying sum of all accounts
+    - Account icons with color-coded circular backgrounds
+    - Horizontal card layout with account name, type, and balance
+    - Professional spacing and typography
+  - **Unified Account Operations Form**: Combined form for balance adjustments and transfers
+    - Operation type selector (Adjust Balance / Transfer Funds)
+    - Adjust Balance mode: Account selection, amount input (+/-), reason field
+    - Transfer mode: From/To account dropdowns, amount input, optional note
+    - Real-time balance display for selected accounts
+    - Form validation with error handling
+    - Success/error feedback via snackbars
+  - **View Account History Button**: Dedicated button to access transaction history
+    - Full-width outlined button with icon
+    - Navigates to comprehensive account history screen
+  - **Account History Screen**: Complete transaction management interface
+    - Period selector tabs (Day/Week/Month/Custom) with date range picker
+    - Date navigator with previous/next buttons for period navigation
+    - Transaction type filters: All, Expenditure, Earnings, Rides, Transfers, Fuel, Fees, Adjustments
+    - Transactions grouped by date with headers (Today, Yesterday, dates)
+    - Color-coded transaction cards with icons and metadata
+    - Swipe-to-delete functionality with confirmation dialog
+    - Delete reverses balance changes atomically
+    - Empty states with filter clearing option
+    - Pull-to-refresh support
+  - **Backend Service Enhancements**: New methods for transaction management
+    - `adjustAccountBalance()`: Manually adjust account balance with audit trail
+    - `getAllAccountTransactions()`: Fetches and unifies ledger entries and transfers
+    - `deleteTransaction()`: Deletes transaction and reverses balance changes
+    - All new methods use proper error handling and logging
+
+### Changed
+
+- **Accounts Screen**: Complete redesign
+
+  - Changed from grid layout (2 columns) to vertical list layout
+  - Removed transaction history section from main view
+  - Removed floating action button
+  - Integrated account operations form directly on screen
+  - Added total balance display at top
+  - Modernized with corporate banking aesthetic
 
 - **Comprehensive App Audit and Critical Fixes**: Major improvements for production readiness
 
@@ -261,3 +347,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Step-by-step ride ending wizard with auto-focus
     - Detailed ride statistics and performance metrics
     - Account balance integration with transaction logging
+
+## [Unreleased]
+
+### Added
+
+- **Expense Stats Screen**: Complete expense tracking and analytics interface
+  - Horizontal bar chart displaying expenses by category with percentages
+  - Period filter with date navigator (Today, Week, Month, Custom)
+  - Swipe-to-delete functionality for expenses with balance reversal
+  - Add Expense quick access button in app bar
+- **New Expense Category**: Tire Maintenance added to expense tracking
+
+### Changed
+
+- **Expense Screen**: Renamed from "Expense Management" to "Add Expense"
+- **Other Fee Category**: Renamed to "Miscellaneous" for better clarity
+- **Menu Drawer**: "Add Expense" renamed to "Expense Stats" with analytics focus
+
+### Technical Details
+
+- Horizontal bar chart replacing pie chart for better data visualization
+- All categories displayed without limitation in expense breakdown
+- Material Design 3 styling throughout expense screens
+- Delete transaction method with atomic balance reversal

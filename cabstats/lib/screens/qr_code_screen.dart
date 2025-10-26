@@ -7,22 +7,22 @@ class QRCodeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Payment QR Code'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.deepPurple.shade50,
-              Colors.white,
-            ],
+        title: const Text(
+          'Payment QR Code',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w400,
+            letterSpacing: 0,
+            color: Color(0xFF202124),
           ),
         ),
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF202124),
+        elevation: 0,
+        surfaceTintColor: const Color(0xFFE8EAED),
+      ),
+      body: Container(
+        color: const Color(0xFFF8F9FA),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -31,18 +31,11 @@ class QRCodeScreen extends StatelessWidget {
               children: [
                 // QR Code Container
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.2),
-                        spreadRadius: 2,
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE8EAED)),
                   ),
                   child: Column(
                     children: [
@@ -50,13 +43,14 @@ class QRCodeScreen extends StatelessWidget {
                       const Text(
                         'Thanks For Riding With Me!',
                         style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurple,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF202124),
+                          letterSpacing: 0,
                         ),
                         textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       
                       // QR Code Image
                       ClipRRect(
@@ -71,46 +65,35 @@ class QRCodeScreen extends StatelessWidget {
                               width: 250,
                               height: 250,
                               decoration: BoxDecoration(
-                                color: Colors.grey[200],
+                                color: const Color(0xFFF8F9FA),
                                 borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFE8EAED)),
                               ),
                               child: const Icon(
                                 Icons.qr_code,
                                 size: 100,
-                                color: Colors.grey,
+                                color: Color(0xFF9AA0A6),
                               ),
                             );
                           },
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 24),
                       
                       // Tips message below QR code
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Colors.orange, Colors.deepOrange],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          ),
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.orange.withOpacity(0.3),
-                              spreadRadius: 1,
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
+                          color: const Color(0xFFFFB84D),
+                          borderRadius: BorderRadius.circular(24),
                         ),
                         child: const Text(
                           'Tips Are Highly Appreciated! 💝',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF202124),
+                            letterSpacing: 0,
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -118,13 +101,13 @@ class QRCodeScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 32),
                 
                 // Action Buttons
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: FilledButton.icon(
                         onPressed: () {
                           // TODO: Implement share functionality
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -133,32 +116,32 @@ class QRCodeScreen extends StatelessWidget {
                             ),
                           );
                         },
-                        icon: const Icon(Icons.share),
+                        icon: const Icon(Icons.share, size: 20),
                         label: const Text('Share QR'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF4285F4),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(24),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: () {
                           Navigator.pop(context);
                         },
-                        icon: const Icon(Icons.close),
+                        icon: const Icon(Icons.close, size: 20),
                         label: const Text('Close'),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.deepPurple,
-                          side: const BorderSide(color: Colors.deepPurple),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          foregroundColor: const Color(0xFF5F6368),
+                          side: const BorderSide(color: Color(0xFFE8EAED)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(24),
                           ),
                         ),
                       ),
