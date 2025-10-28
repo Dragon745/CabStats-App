@@ -375,99 +375,106 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   void _showOperationsBottomSheet() {
+    // Reset form state when opening
+    _selectedFromAccount = _accounts.first.id;
+    _selectedToAccount = null;
+    _selectedAdjustmentAccount = _accounts.first.id;
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          builder: (context, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 12),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    _operationType == 'adjust' ? 'Adjust Balance' : 'Transfer Funds',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF202124),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Expanded(
-                  child: Form(
-                    key: _formKey,
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: _operationType == 'adjust' ? _buildAdjustForm() : _buildTransferForm(),
-                    ),
-                  ),
-                ),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.shade200,
-                      blurRadius: 20,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _isSubmitting ? null : _submitOperation,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF4285F4),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      ),
-                      child: _isSubmitting
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : Text(
-                              _operationType == 'adjust' ? 'Apply Adjustment' : 'Transfer Money',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                    ),
-                  ),
-                ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder: (context, scrollController) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
               ),
-            ],
+              child: Column(
+                children: [
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      _operationType == 'adjust' ? 'Adjust Balance' : 'Transfer Funds',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFF202124),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Expanded(
+                    child: Form(
+                      key: _formKey,
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _operationType == 'adjust' ? _buildAdjustForm(setModalState) : _buildTransferForm(setModalState),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.shade200,
+                          blurRadius: 20,
+                          offset: const Offset(0, -4),
+                        ),
+                      ],
+                    ),
+                    child: SafeArea(
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: _isSubmitting ? null : () => _submitOperation(),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF4285F4),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          child: _isSubmitting
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(
+                                  _operationType == 'adjust' ? 'Apply Adjustment' : 'Transfer Money',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
-        ),
       ).then((_) {
         _amountController.clear();
         _reasonController.clear();
@@ -475,11 +482,11 @@ class _AccountsScreenState extends State<AccountsScreen> {
       });
   }
 
-  Widget _buildAdjustForm() {
+  Widget _buildAdjustForm(Function setModalState) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildDropdown('Account', _selectedAdjustmentAccount, _accounts, (value) => setState(() => _selectedAdjustmentAccount = value)),
+        _buildDropdown('Account', _selectedAdjustmentAccount, _accounts, (value) => setModalState(() => _selectedAdjustmentAccount = value)),
         if (_selectedAdjustmentAccount != null) _buildBalanceInfo(_balances[_selectedAdjustmentAccount] ?? 0.0),
         const SizedBox(height: 24),
         _buildTextField(_amountController, 'Amount', 'Enter amount', keyboardType: TextInputType.number),
@@ -489,19 +496,23 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  Widget _buildTransferForm() {
+  Widget _buildTransferForm(Function setModalState) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildDropdown('From', _selectedFromAccount, _accounts, (value) {
-          setState(() {
+          setModalState(() {
             _selectedFromAccount = value;
             _selectedToAccount = null;
           });
         }),
         if (_selectedFromAccount != null) _buildBalanceInfo(_balances[_selectedFromAccount] ?? 0.0),
         const SizedBox(height: 24),
-        _buildDropdown('To', _selectedToAccount, _availableToAccounts, (value) => setState(() => _selectedToAccount = value)),
+        _buildDropdown('To', _selectedToAccount, _availableToAccounts, (value) => setModalState(() => _selectedToAccount = value), key: ValueKey('to_dropdown_$_selectedFromAccount')),
+        if (_selectedToAccount != null) ...[
+          const SizedBox(height: 8),
+          _buildBalanceInfo(_balances[_selectedToAccount] ?? 0.0),
+        ],
         const SizedBox(height: 24),
         _buildTextField(_amountController, 'Amount', 'Enter amount', keyboardType: TextInputType.number),
         const SizedBox(height: 24),
@@ -533,9 +544,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
     );
   }
 
-  Widget _buildDropdown(String label, String? value, List<Account> items, ValueChanged<String?> onChanged) {
+  Widget _buildDropdown(String label, String? value, List<Account> items, ValueChanged<String?> onChanged, {Key? key}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      key: key,
       children: [
         Text(
           label,
@@ -561,6 +573,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
           ),
           items: items.map((account) => DropdownMenuItem<String>(value: account.id, child: Text(account.name))).toList(),
           onChanged: onChanged,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select $label';
+            }
+            return null;
+          },
         ),
       ],
     );
@@ -603,6 +621,42 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Future<void> _submitOperation() async {
     if (!_formKey.currentState!.validate()) return;
 
+    // Additional validation for transfer
+    if (_operationType == 'transfer') {
+      if (_selectedFromAccount == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a source account'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      if (_selectedToAccount == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a destination account'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+      
+      // Parse amount and validate
+      final amount = double.tryParse(_amountController.text);
+      if (amount == null || amount <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      // Check if sufficient balance
+      if (amount > (_balances[_selectedFromAccount] ?? 0.0)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Insufficient balance. Available: ₹${(_balances[_selectedFromAccount] ?? 0.0).toStringAsFixed(2)}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -620,23 +674,45 @@ class _AccountsScreenState extends State<AccountsScreen> {
           );
         }
       } else {
-        success = await _accountService.transferBetweenAccounts(
-          fromAccountId: _selectedFromAccount!,
-          toAccountId: _selectedToAccount!,
-          amount: double.parse(_amountController.text),
-          note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
-        );
-        if (success && mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('₹${double.parse(_amountController.text).toStringAsFixed(2)} transferred successfully'),
-              backgroundColor: Colors.green,
-            ),
+        // Call transferBetweenAccounts and handle exceptions
+        try {
+          success = await _accountService.transferBetweenAccounts(
+            fromAccountId: _selectedFromAccount!,
+            toAccountId: _selectedToAccount!,
+            amount: double.parse(_amountController.text),
+            note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
           );
+          if (success && mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('₹${double.parse(_amountController.text).toStringAsFixed(2)} transferred successfully'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            // Reload balances after successful transfer
+            await _loadBalances();
+          }
+        } catch (e) {
+          // Handle specific exceptions from transferBetweenAccounts
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(e.toString().replaceFirst('Exception: ', '')),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+          return;
         }
       }
-      await _loadBalances();
+      
+      // Only reload balances for non-transfer operations here
+      // (transfer already reloads in the try-catch above)
+      if (_operationType != 'transfer') {
+        await _loadBalances();
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

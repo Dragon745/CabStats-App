@@ -82,27 +82,34 @@ class LocationService {
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         
-        // Priority: street > subLocality > locality > subAdministrativeArea > administrativeArea
-        // Go from most specific (street) to most general (administrative area)
-        String locality = place.thoroughfare ?? 
-                         place.subLocality ?? 
-                         place.locality ?? 
-                         place.subAdministrativeArea ??
-                         place.administrativeArea ?? 
-                         'Unknown Location';
+        // Build location string with priority: subLocality > locality > administrativeArea > country
+        String? subLocality = place.subLocality;
+        String? placeLocality = place.locality;
+        String? administrativeArea = place.administrativeArea;
+        String? country = place.country;
         
-        // If locality is still empty or null, use coordinates as fallback
-        if (locality.isEmpty || locality == 'Unknown Location') {
-          locality = 'Location ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+        // Pick the first available location from priority list
+        String locality = '';
+        if (subLocality != null && subLocality.isNotEmpty) {
+          locality = subLocality;
+        } else if (placeLocality != null && placeLocality.isNotEmpty) {
+          locality = placeLocality;
+        } else if (administrativeArea != null && administrativeArea.isNotEmpty) {
+          locality = administrativeArea;
+        } else if (country != null && country.isNotEmpty) {
+          locality = country;
+        } else {
+          // Fallback to coordinates if nothing else is available
+          locality = '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
         }
         
         return locality;
       } else {
-        return 'Unknown Location';
+        return '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
       }
     } catch (e) {
       // Return a fallback location instead of null
-      return 'Location ${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
+      return '${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}';
     }
   }
 

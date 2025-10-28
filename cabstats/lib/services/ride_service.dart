@@ -29,6 +29,13 @@ class RideService {
         throw Exception('User not authenticated');
       }
 
+      // Check for existing active ride
+      final existingActiveRide = await getActiveRide();
+      if (existingActiveRide != null) {
+        print('❌ Cannot start new ride while another ride is active: ${existingActiveRide.id}');
+        throw Exception('An active ride already exists. Please end or cancel it first.');
+      }
+
       final ride = Ride(
         id: '', // Will be set after document creation
         userId: _currentUserId!,
@@ -58,7 +65,11 @@ class RideService {
       
       // Update the ride with the document ID
       final rideWithId = ride.copyWith(id: docRef.id);
-      await docRef.update({'id': docRef.id});
+      // Update the ride with proper endTime format
+      await docRef.update({
+        'id': docRef.id,
+        'startTime': ride.startTime.millisecondsSinceEpoch,
+      });
       
       return rideWithId;
     } catch (e) {

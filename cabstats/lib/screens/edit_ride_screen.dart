@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/ride.dart';
 import '../models/account.dart';
+import '../models/ledger_entry.dart';
 import '../services/ride_service.dart';
 import '../services/account_balance_service.dart';
 
@@ -194,25 +195,41 @@ class _EditRideScreenState extends State<EditRideScreen> {
       // Use atomic transaction processing
       final feeDeductions = <String, double>{};
       final paymentCredits = <String, double>{};
+      final feeCategories = <String, TransactionCategory>{};
 
-      // Add fee deductions
+      // Add fee deductions (include negative amounts for adjustments)
       final tollFee = double.parse(_tollFeeController.text);
       final platformFee = double.parse(_platformFeeController.text);
       final otherFee = double.parse(_otherFeeController.text);
       final airportFee = double.parse(_airportFeeController.text);
 
-      if (tollFee > 0) feeDeductions[_tollFeeAccount] = tollFee;
-      if (platformFee > 0) feeDeductions[_platformFeeAccount] = platformFee;
-      if (otherFee > 0) feeDeductions[_otherFeeAccount] = otherFee;
-      if (airportFee > 0) feeDeductions[_airportFeeAccount] = airportFee;
-
-      // Add payment credits
-      for (final entry in paymentSplits.entries) {
-        paymentCredits[entry.key] = entry.value;
+      if (tollFee != 0) {
+        feeDeductions[_tollFeeAccount] = tollFee;
+        feeCategories[_tollFeeAccount] = TransactionCategory.tollFee;
+      }
+      if (platformFee != 0) {
+        feeDeductions[_platformFeeAccount] = platformFee;
+        feeCategories[_platformFeeAccount] = TransactionCategory.platformFee;
+      }
+      if (otherFee != 0) {
+        feeDeductions[_otherFeeAccount] = otherFee;
+        feeCategories[_otherFeeAccount] = TransactionCategory.otherFee;
+      }
+      if (airportFee != 0) {
+        feeDeductions[_airportFeeAccount] = airportFee;
+        feeCategories[_airportFeeAccount] = TransactionCategory.airportFee;
       }
 
-      // Calculate fuel allocation
-      final fuelAllocation = _calculateProfit() / 2;
+      // Add payment credits (include negative amounts)
+      for (final entry in paymentSplits.entries) {
+        if (entry.value != 0) {
+          paymentCredits[entry.key] = entry.value;
+        }
+      }
+
+      // Calculate fuel allocation (12 rupees per km)
+      final km = double.parse(_kmController.text);
+      final fuelAllocation = km * 12.0;
 
       // Process transactions atomically
       final success = await _accountService.processRideTransactionsAtomically(
@@ -221,6 +238,7 @@ class _EditRideScreenState extends State<EditRideScreen> {
         paymentCredits: paymentCredits,
         rideData: updatedRide.toJson(),
         fuelAllocation: fuelAllocation > 0 ? fuelAllocation : null,
+        feeCategories: feeCategories,
       );
 
       if (success) {
@@ -555,7 +573,7 @@ class _EditRideScreenState extends State<EditRideScreen> {
                         children: [
                           const Text('Fuel Allocation:'),
                           Text(
-                            '₹${(_calculateProfit() / 2).toStringAsFixed(2)}',
+                            '₹${((double.tryParse(_kmController.text) ?? 0.0) * 12.0).toStringAsFixed(2)}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],

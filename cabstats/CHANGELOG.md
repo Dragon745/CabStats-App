@@ -5,6 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Expense Stats Screen Bug Fixes**: Fixed all 13 bugs in the expense stats screen
+
+  - **BUG #1**: Fixed date filtering logic - Changed from exclusive date comparisons to inclusive date range filtering using `isAtSameMomentAs` and proper `isAfter`/`isBefore` combinations to ensure boundary dates are included
+  - **BUG #2**: Fixed "Today" period calculation - Now sets end date to end of day (23:59:59) instead of current moment, showing full day expenses
+  - **BUG #3**: Fixed week period display across months - Added logic to detect when week spans multiple months and display both month names (e.g., "28 Jan - 3 Feb")
+  - **BUG #4**: Fixed week navigation end date calculation - Now correctly calculates 7-day period with proper time components (days: 6, hours: 23, minutes: 59, seconds: 59)
+  - **BUG #5**: Fixed month navigation with year boundary - Added handling for December-to-January transitions to prevent month overflow errors
+  - **BUG #6**: Fixed "Today" navigation end dates - Now sets end date to end of day (23:59:59) when navigating previous/next days
+  - **BUG #7**: Removed unused account filter code - Deleted `_selectedAccountId` variable and filter logic since no UI exists to set it
+  - **BUG #8**: Removed unused account balance loading - Deleted `_accountBalances` variable and `_loadAccountBalances` method to eliminate unnecessary API calls
+  - **BUG #9**: Removed unused top category method - Deleted `_getTopCategory()` method that was never called
+  - **BUG #10**: Fixed division by zero in percentage calculation - Added check for `totalExpenses > 0` before calculating percentages and showing breakdown
+  - **BUG #11**: Fixed week navigation boundary logic - Corrected navigation checks to prevent navigating to future dates
+  - **BUG #12**: Enabled custom period forward navigation - Added logic to allow forward navigation for custom periods when not at current date
+  - **BUG #13**: Added mounted checks in error handlers - Added `if (mounted)` checks before setState in all catch blocks to prevent errors when widget is disposed
+
+- **Transfer Section Bug Fixes**: Fixed multiple critical bugs in account transfer functionality
+
+  - **BUG #1**: Added missing "To" account validation - Form now validates that destination account is selected before submission
+  - **BUG #2**: Fixed account balance document existence checks - Now ensures both source and destination account documents exist before attempting transfer
+  - **BUG #3**: Added Firestore transaction atomicity - Transfer now uses atomic Firestore transactions to ensure balances are updated correctly or not at all
+  - **BUG #4**: Fixed transfer record creation timing - Transfer record is now created within the transaction to prevent orphaned records
+  - **BUG #5**: Added balance display for destination account - "To" account now shows current balance so users can see destination balance
+  - **BUG #6**: Added dropdown form validation - Dropdown fields now validate that a selection has been made
+  - **BUG #7**: Enhanced error handling with specific error messages - Better feedback for insufficient balance, missing accounts, and network errors
+  - **BUG #8**: Fixed balance refresh timing - Balances are now reloaded immediately after successful transfer before closing the form
+  - **BUG #9**: Added comprehensive pre-validation - Client-side validation for amount, account selection, and sufficient balance before attempting server operation
+  - **BUG #10**: Improved user feedback with detailed error messages showing available balance when transfer fails
+  - **BUG #11**: Fixed "To" accounts list and balance not updating when "From" account changes - Added ValueKey to "To" dropdown to force widget rebuild when "From" account changes, ensuring the dropdown shows the correct available accounts
+  - **BUG #12**: Fixed modal bottom sheet not updating form state - Added StatefulBuilder to modal bottom sheet and reset form state when opening, ensuring dropdown selections and balances update properly when changing accounts
+
+- **Expense Stats Screen Bug Fixes**: Fixed all 13 bugs in the expense stats screen
+
+  - **BUG #1**: Fixed date filtering logic - Changed from exclusive date comparisons to inclusive date range filtering using `isAtSameMomentAs` and proper `isAfter`/`isBefore` combinations to ensure boundary dates are included
+  - **BUG #2**: Fixed "Today" period calculation - Now sets end date to end of day (23:59:59) instead of current moment, showing full day expenses
+  - **BUG #3**: Fixed week period display across months - Added logic to detect when week spans multiple months and display both month names (e.g., "28 Jan - 3 Feb")
+  - **BUG #4**: Fixed week navigation end date calculation - Now correctly calculates 7-day period with proper time components (days: 6, hours: 23, minutes: 59, seconds: 59)
+  - **BUG #5**: Fixed month navigation with year boundary - Added handling for December-to-January transitions to prevent month overflow errors
+  - **BUG #6**: Fixed "Today" navigation end dates - Now sets end date to end of day (23:59:59) when navigating previous/next days
+  - **BUG #7**: Removed unused account filter code - Deleted `_selectedAccountId` variable and filter logic since no UI exists to set it
+  - **BUG #8**: Removed unused account balance loading - Deleted `_accountBalances` variable and `_loadAccountBalances` method to eliminate unnecessary API calls
+  - **BUG #9**: Removed unused top category method - Deleted `_getTopCategory()` method that was never called
+  - **BUG #10**: Fixed division by zero in percentage calculation - Added check for `totalExpenses > 0` before calculating percentages and showing breakdown
+  - **BUG #11**: Fixed week navigation boundary logic - Corrected navigation checks to prevent navigating to future dates
+  - **BUG #12**: Enabled custom period forward navigation - Added logic to allow forward navigation for custom periods when not at current date
+  - **BUG #13**: Added mounted checks in error handlers - Added `if (mounted)` checks before setState in all catch blocks to prevent errors when widget is disposed
+
+- **Critical Bug Fix**: Fixed refuel balance calculation bug where fuel expenses were incorrectly adding to the Fuel Reserve balance instead of deducting from it. The issue was in the `addRefuel` method where a negative cost value was being passed to `addTransaction`, causing the balance calculation to add instead of subtract. Changed from passing `-cost` to passing `cost` with the correct `TransactionType.debit` type.
+
+- **Bug #1**: Fixed metrics calculation timing - `calculateMetrics()` now called after `endTime` is set in the ride wizard, preventing division by zero errors in profit-per-minute calculations.
+
+- **Bug #2**: Fixed incorrect fee categorization - All fees in `processRideTransactions()` were being categorized as `tollFee`. Now properly distinguishes between tollFee, platformFee, airportFee, and otherFee categories based on the fee type mapping.
+
+- **Bug #3**: Fixed missing transaction processing in old end ride screen - The `end_ride_screen.dart` now processes account transactions just like the wizard screen, ensuring balances are always updated when ending rides.
+
+- **Bug #4**: Fixed incorrect fee category mapping in atomic transactions - Replaced hardcoded account-based fee category mapping with proper fee type-based categorization that correctly maps fee types to their respective transaction categories.
+
+- **Bug #5**: Fixed missing support for negative fees (adjustments) - Changed fee processing logic to accept `!= 0` instead of `> 0`, allowing negative values for refunds, adjustments, and corrections. Balance updates now properly handle both positive and negative amounts.
+
+- **Bug #6**: Added check for existing active ride before starting new ride - Prevents creating multiple active rides which can cause inconsistent state. Now throws exception if user tries to start a ride while another is active.
+
+- **Bug #7**: Fixed duplicate document ID update in startRide - Removed redundant docRef.update() call that was updating the document unnecessarily. Also fixed to properly update startTime in Firestore milliseconds format.
+
+- **Bug #8**: Fixed async error in atomic transaction - Moved reverseRideTransactions() call outside the Firestore transaction since it performs Firestore reads which are not allowed inside transactions. This was causing transaction failures.
+
+- **Bug #9**: Changed fuel allocation calculation from profit/2 to 12 rupees per km - Updated fuel allocation calculation to use a fixed rate of ₹12 per kilometer instead of being half of profit. This provides more predictable fuel allocation regardless of profit margins.
+
+- **Bug #10**: Added ensureAccountBalanceExists for fee accounts in atomic transactions - Now ensures fee account balance documents exist before updating balances, preventing transaction failures when updating rides.
+
+- **Bug #11**: Fixed using set with merge in Firestore transaction - Changed from transaction.set() with SetOptions(merge: true) to transaction.update() for updating ride document. This is the correct approach for partial updates within a transaction.
+
+- **Bug #12**: Fixed missing TransactionCategory import - Added missing import for TransactionCategory enum in edit_ride_screen.dart to fix compilation errors.
+
+- **Bug #13**: Fixed location display showing only lat/lng coordinates - Improved geocoding logic to build comprehensive location strings using all available address components (street, subLocality, locality, administrativeArea, country, postalCode). Now displays proper addresses instead of just coordinates. If address components are unavailable, it falls back to coordinates in format: "lat, lng" without the "Location" prefix.
+
 ## [1.1.0] - 2025-10-26
 
 ### Added
@@ -361,6 +440,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Expense Stats Screen**: Changed default period from weekly to daily
 - **Expense Screen**: Renamed from "Expense Management" to "Add Expense"
 - **Other Fee Category**: Renamed to "Miscellaneous" for better clarity
 - **Menu Drawer**: "Add Expense" renamed to "Expense Stats" with analytics focus

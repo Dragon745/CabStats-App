@@ -112,8 +112,8 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
     // Profit = Amount Received - Platform Fee - Other Fee - Airport Fee - Toll Fee
     _profit = totalAmountReceived - totalFees;
 
-    // Fuel Allocation = Profit / 2
-    _fuelAllocation = _profit / 2;
+    // Fuel Allocation = 12 rupees per km
+    _fuelAllocation = km * 12.0;
 
     // Profit Per KM = Profit / KM
     _profitPerKm = (km > 0) ? _profit / km : 0;
@@ -177,9 +177,10 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
           'platform_wallets': _parseDouble(_platformPaymentController.text),
         },
         status: RideStatus.completed,
+        endTime: DateTime.now(), // Set endTime BEFORE calculating metrics
       );
 
-      // Calculate metrics
+      // Calculate metrics (now that endTime is set)
       updatedRide.calculateMetrics();
 
       // Save ride
@@ -222,25 +223,31 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
 
   Future<void> _processAccountTransactions(Ride ride) async {
     try {
-      // Process fee deductions
+      // Process fee deductions (include negative amounts for adjustments)
       Map<String, double> feeDeductions = {};
-      if (ride.tollFee != null && ride.tollFee! > 0) {
+      Map<String, TransactionCategory> feeCategories = {};
+      
+      if (ride.tollFee != null && ride.tollFee! != 0) {
         feeDeductions[ride.tollFeeAccount!] = ride.tollFee!;
+        feeCategories[ride.tollFeeAccount!] = TransactionCategory.tollFee;
       }
-      if (ride.platformFee != null && ride.platformFee! > 0) {
+      if (ride.platformFee != null && ride.platformFee! != 0) {
         feeDeductions[ride.platformFeeAccount!] = ride.platformFee!;
+        feeCategories[ride.platformFeeAccount!] = TransactionCategory.platformFee;
       }
-      if (ride.airportFee != null && ride.airportFee! > 0) {
+      if (ride.airportFee != null && ride.airportFee! != 0) {
         feeDeductions[ride.airportFeeAccount!] = ride.airportFee!;
+        feeCategories[ride.airportFeeAccount!] = TransactionCategory.airportFee;
       }
-      if (ride.otherFee != null && ride.otherFee! > 0) {
+      if (ride.otherFee != null && ride.otherFee! != 0) {
         feeDeductions[ride.otherFeeAccount!] = ride.otherFee!;
+        feeCategories[ride.otherFeeAccount!] = TransactionCategory.otherFee;
       }
 
-      // Process payment credits
+      // Process payment credits (include negative amounts for adjustments)
       Map<String, double> paymentCredits = {};
       ride.paymentSplits.forEach((accountId, amount) {
-        if (amount > 0) {
+        if (amount != 0) {
           paymentCredits[accountId] = amount;
         }
       });
@@ -250,6 +257,7 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
         rideId: ride.id!,
         feeDeductions: feeDeductions,
         paymentCredits: paymentCredits,
+        feeCategories: feeCategories,
       );
 
       // Add pending fuel allocation

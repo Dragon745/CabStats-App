@@ -70,9 +70,9 @@ class Ride {
     return getTotalAmountReceived() - platformFee - otherFee - airportFee - tollFee;
   }
 
-  // Calculate fuel allocation (half of profit)
+  // Calculate fuel allocation (12 rupees per km)
   double calculateFuelAllocation() {
-    return calculateProfit() / 2;
+    return km * 12.0;
   }
 
   // Calculate profit per KM
@@ -244,8 +244,8 @@ class Ride {
     // Profit = Amount Received – Platform Fee – Other Fee – Airport Fee – Toll Fee
     profit = totalAmountReceived - totalFees;
 
-    // Fuel Allocation = Profit / 2
-    fuelAllocation = profit! / 2;
+    // Fuel Allocation = 12 rupees per km
+    fuelAllocation = km * 12.0;
 
     // Profit Per KM = Profit / KM
     profitPerKm = (km > 0) ? profit! / km : 0;

@@ -16,14 +16,10 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
   
   List<LedgerEntry> _expenses = [];
   List<Account> _accounts = [];
-  Map<String, double> _accountBalances = {};
   bool _isLoading = true;
-  String _selectedPeriod = 'Week';
-  DateTime _startDate = DateTime.now().subtract(const Duration(days: 7));
-  DateTime _endDate = DateTime.now();
-  
-  // Filter states
-  String? _selectedAccountId;
+  String _selectedPeriod = 'Today';
+  late DateTime _startDate;
+  late DateTime _endDate;
   
   // Expense categories with their icons
   final Map<TransactionCategory, IconData> _categoryIcons = {
@@ -48,6 +44,9 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, now.day);
+    _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     _accounts = Account.getSampleAccounts();
     _loadData();
   }
@@ -56,10 +55,7 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
     setState(() => _isLoading = true);
     
     try {
-      await Future.wait([
-        _loadExpenses(),
-        _loadAccountBalances(),
-      ]);
+      await _loadExpenses();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -83,32 +79,19 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
           .where((entry) => entry.nature == TransactionNature.expense)
           .where((entry) {
             final entryDate = entry.timestamp;
-            return entryDate.isAfter(_startDate.subtract(const Duration(days: 1))) &&
-                   entryDate.isBefore(_endDate.add(const Duration(days: 1)));
+            return entryDate.isAtSameMomentAs(_startDate) || 
+                   entryDate.isAtSameMomentAs(_endDate) ||
+                   (entryDate.isAfter(_startDate) && entryDate.isBefore(_endDate));
           })
           .toList();
       
-      // Apply filters
-      var filtered = expenseEntries;
+      expenseEntries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       
-      if (_selectedAccountId != null) {
-        filtered = filtered.where((e) => e.accountId == _selectedAccountId).toList();
+      _expenses = expenseEntries;
+    } catch (e) {
+      if (mounted) {
+        print('Error loading expenses: $e');
       }
-      
-      filtered.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
-      _expenses = filtered;
-    } catch (e) {
-      print('Error loading expenses: $e');
-    }
-  }
-
-  Future<void> _loadAccountBalances() async {
-    try {
-      final accountIds = _accounts.map((account) => account.id).toList();
-      _accountBalances = await _accountService.getMultipleAccountBalances(accountIds);
-    } catch (e) {
-      print('Error loading account balances: $e');
     }
   }
 
@@ -160,14 +143,6 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
     return breakdown;
   }
 
-  TransactionCategory? _getTopCategory() {
-    final breakdown = _getCategoryBreakdown();
-    if (breakdown.isEmpty) return null;
-    
-    return breakdown.entries
-        .reduce((a, b) => a.value > b.value ? a : b)
-        .key;
-  }
 
   void _selectPeriod(String period) {
     setState(() {
@@ -177,15 +152,15 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
       switch (period) {
         case 'Today':
           _startDate = DateTime(now.year, now.month, now.day);
-          _endDate = now;
+          _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           break;
         case 'Week':
           _startDate = now.subtract(const Duration(days: 7));
-          _endDate = now;
+          _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           break;
         case 'Month':
           _startDate = DateTime(now.year, now.month, 1);
-          _endDate = now;
+          _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
           break;
       }
     });
@@ -315,11 +290,11 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
               letterSpacing: -1,
             ),
           ),
-          if (breakdownList.isNotEmpty) ...[
+          if (breakdownList.isNotEmpty && totalExpenses > 0) ...[
             const SizedBox(height: 20),
             Column(
               children: breakdownList.map((entry) {
-                final percentage = (entry.value / totalExpenses * 100);
+                final percentage = totalExpenses > 0 ? (entry.value / totalExpenses * 100) : 0.0;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
@@ -449,7 +424,11 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
       case 'Today':
         return '${_startDate.day} ${_getMonthName(_startDate.month)}, ${_startDate.year}';
       case 'Week':
-        return '${_startDate.day}-${_endDate.day} ${_getMonthName(_startDate.month)}';
+        if (_startDate.month == _endDate.month) {
+          return '${_startDate.day}-${_endDate.day} ${_getMonthName(_startDate.month)}';
+        } else {
+          return '${_startDate.day} ${_getMonthName(_startDate.month)} - ${_endDate.day} ${_getMonthName(_endDate.month)}';
+        }
       case 'Month':
         return '${_getMonthName(_startDate.month)} ${_startDate.year}';
       case 'Custom':
@@ -486,12 +465,13 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
       case 'Today':
         return _startDate.add(const Duration(days: 1)).isBefore(now) || _startDate.add(const Duration(days: 1)).isAtSameMomentAs(now);
       case 'Week':
-        return _endDate.add(const Duration(days: 1)).isBefore(now) || _endDate.add(const Duration(days: 1)).isAtSameMomentAs(now);
+        return _endDate.isBefore(now);
       case 'Month':
         final nextMonth = DateTime(_startDate.year, _startDate.month + 1, 1);
         return nextMonth.isBefore(now) || nextMonth.isAtSameMomentAs(now);
       case 'Custom':
-        return false;
+        final daysDiff = _endDate.difference(_startDate).inDays;
+        return _endDate.add(Duration(days: daysDiff + 1)).isBefore(now);
       default:
         return false;
     }
@@ -502,15 +482,24 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
       switch (_selectedPeriod) {
         case 'Today':
           _startDate = _startDate.subtract(const Duration(days: 1));
-          _endDate = _startDate;
+          _endDate = DateTime(_startDate.year, _startDate.month, _startDate.day, 23, 59, 59);
           break;
         case 'Week':
           _startDate = _startDate.subtract(const Duration(days: 7));
-          _endDate = _startDate.add(const Duration(days: 6));
+          _endDate = _startDate.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
           break;
         case 'Month':
-          _startDate = DateTime(_startDate.year, _startDate.month - 1, 1);
-          _endDate = DateTime(_startDate.year, _startDate.month + 1, 0);
+          if (_startDate.month == 1) {
+            _startDate = DateTime(_startDate.year - 1, 12, 1);
+          } else {
+            _startDate = DateTime(_startDate.year, _startDate.month - 1, 1);
+          }
+          _endDate = DateTime(_startDate.year, _startDate.month + 1, 0, 23, 59, 59);
+          break;
+        case 'Custom':
+          final daysDiff = _endDate.difference(_startDate).inDays;
+          _endDate = _startDate;
+          _startDate = _startDate.subtract(Duration(days: daysDiff));
           break;
       }
     });
@@ -522,15 +511,24 @@ class _ExpenseStatsScreenState extends State<ExpenseStatsScreen> {
       switch (_selectedPeriod) {
         case 'Today':
           _startDate = _startDate.add(const Duration(days: 1));
-          _endDate = _startDate;
+          _endDate = DateTime(_startDate.year, _startDate.month, _startDate.day, 23, 59, 59);
           break;
         case 'Week':
           _startDate = _startDate.add(const Duration(days: 7));
-          _endDate = _startDate.add(const Duration(days: 6));
+          _endDate = _startDate.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
           break;
         case 'Month':
-          _startDate = DateTime(_startDate.year, _startDate.month + 1, 1);
-          _endDate = DateTime(_startDate.year, _startDate.month + 1, 0);
+          if (_startDate.month == 12) {
+            _startDate = DateTime(_startDate.year + 1, 1, 1);
+          } else {
+            _startDate = DateTime(_startDate.year, _startDate.month + 1, 1);
+          }
+          _endDate = DateTime(_startDate.year, _startDate.month + 1, 0, 23, 59, 59);
+          break;
+        case 'Custom':
+          final daysDiff = _endDate.difference(_startDate).inDays;
+          _startDate = _endDate.add(const Duration(days: 1));
+          _endDate = _startDate.add(Duration(days: daysDiff));
           break;
       }
     });

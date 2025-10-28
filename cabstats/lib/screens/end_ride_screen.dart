@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/ride.dart';
 import '../models/account.dart';
+import '../models/ledger_entry.dart';
 import '../services/ride_service.dart';
+import '../services/account_balance_service.dart';
 
 class EndRideScreen extends StatefulWidget {
   final Ride ride;
@@ -16,6 +18,7 @@ class EndRideScreen extends StatefulWidget {
 
 class _EndRideScreenState extends State<EndRideScreen> {
   final RideService _rideService = RideService();
+  final AccountBalanceService _accountService = AccountBalanceService();
   final List<Account> _accounts = Account.getSampleAccounts();
   
   // Form controllers
@@ -141,9 +144,13 @@ class _EndRideScreenState extends State<EndRideScreen> {
 
     try {
       final updatedRide = _createUpdatedRide();
+      updatedRide.calculateMetrics(); // Calculate metrics with endTime
       final success = await _rideService.endRide(widget.ride.id, updatedRide);
       
       if (success) {
+        // Process account transactions
+        await _processAccountTransactions(updatedRide);
+        
         Navigator.popUntil(context, (route) => route.isFirst);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -170,6 +177,59 @@ class _EndRideScreenState extends State<EndRideScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _processAccountTransactions(Ride ride) async {
+    try {
+      // Process fee deductions (include negative amounts for adjustments)
+      Map<String, double> feeDeductions = {};
+      Map<String, TransactionCategory> feeCategories = {};
+      
+      if (ride.tollFee != null && ride.tollFee! != 0) {
+        feeDeductions[ride.tollFeeAccount] = ride.tollFee!;
+        feeCategories[ride.tollFeeAccount] = TransactionCategory.tollFee;
+      }
+      if (ride.platformFee != null && ride.platformFee! != 0) {
+        feeDeductions[ride.platformFeeAccount] = ride.platformFee!;
+        feeCategories[ride.platformFeeAccount] = TransactionCategory.platformFee;
+      }
+      if (ride.airportFee != null && ride.airportFee! != 0) {
+        feeDeductions[ride.airportFeeAccount] = ride.airportFee!;
+        feeCategories[ride.airportFeeAccount] = TransactionCategory.airportFee;
+      }
+      if (ride.otherFee != null && ride.otherFee! != 0) {
+        feeDeductions[ride.otherFeeAccount] = ride.otherFee!;
+        feeCategories[ride.otherFeeAccount] = TransactionCategory.otherFee;
+      }
+
+      // Process payment credits
+      Map<String, double> paymentCredits = {};
+      ride.paymentSplits.forEach((accountId, amount) {
+        if (amount != 0) {
+          paymentCredits[accountId] = amount;
+        }
+      });
+
+      // Add transactions to ledger
+      await _accountService.processRideTransactions(
+        rideId: ride.id,
+        feeDeductions: feeDeductions,
+        paymentCredits: paymentCredits,
+        feeCategories: feeCategories,
+      );
+
+      // Add pending fuel allocation
+      if (ride.fuelAllocation != null && ride.fuelAllocation! > 0) {
+        await _accountService.addPendingFuelAllocation(
+          ride.fuelAllocation!,
+          ride.id,
+        );
+      }
+
+      print('Account transactions processed successfully');
+    } catch (e) {
+      print('Error processing account transactions: $e');
     }
   }
 
