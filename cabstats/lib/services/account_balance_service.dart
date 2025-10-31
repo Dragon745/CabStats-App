@@ -321,15 +321,7 @@ class AccountBalanceService {
         return false;
       }
 
-      // Check if source account has sufficient balance
-      final fromBalanceObj = await _localStorage.getAccountBalance(fromAccountId);
-      if (fromBalanceObj == null || fromBalanceObj.balance < amount) {
-        final available = fromBalanceObj?.balance ?? 0.0;
-        DebugLogger.logError('Insufficient balance in source account. Available: ₹$available, Required: ₹$amount');
-        throw Exception('Insufficient balance in source account');
-      }
-
-      // Ensure both account balance documents exist
+      // Ensure both account balance documents exist (allow negative balances)
       await ensureAccountBalanceExists(fromAccountId);
       await ensureAccountBalanceExists(toAccountId);
 
@@ -660,23 +652,28 @@ class AccountBalanceService {
       if (!success) return false;
       
       // Update pending allocation (subtract transferred amount)
+      // Allow allocation to go negative for advance refueling
       final existing = await _localStorage.getPendingFuelAllocation();
       
       if (existing != null) {
         final newAmount = existing.amount - amount;
-        
-        if (newAmount <= 0.01) {
-          // Clear if amount is negligible
-          await _localStorage.clearPendingFuelAllocation();
-        } else {
-          final updated = PendingFuelAllocation(
-            id: existing.id,
-            amount: newAmount,
-            lastUpdated: DateTime.now(),
-            rideIds: existing.rideIds,
-          );
-          await _localStorage.saveFuelAllocation(updated);
-        }
+        // Allow negative values - don't clear allocation
+        final updated = PendingFuelAllocation(
+          id: existing.id,
+          amount: newAmount,
+          lastUpdated: DateTime.now(),
+          rideIds: existing.rideIds,
+        );
+        await _localStorage.saveFuelAllocation(updated);
+      } else {
+        // Create negative allocation if doesn't exist (advance refueling)
+        final newAllocation = PendingFuelAllocation(
+          id: 'current',
+          amount: -amount,
+          lastUpdated: DateTime.now(),
+          rideIds: [],
+        );
+        await _localStorage.saveFuelAllocation(newAllocation);
       }
       
       DebugLogger.log('Transferred fuel allocation: ₹$amount');
@@ -696,21 +693,16 @@ class AccountBalanceService {
       
       if (existing != null) {
         final newAmount = existing.amount + adjustmentAmount;
-        
-        if (newAmount <= 0) {
-          // Delete if zero or negative
-          await _localStorage.clearPendingFuelAllocation();
-        } else {
-          final updated = PendingFuelAllocation(
-            id: existing.id,
-            amount: newAmount,
-            lastUpdated: DateTime.now(),
-            rideIds: existing.rideIds,
-          );
-          await _localStorage.saveFuelAllocation(updated);
-        }
-      } else if (adjustmentAmount > 0) {
-        // Create new if doesn't exist and adjustment is positive
+        // Allow negative values - don't delete allocation
+        final updated = PendingFuelAllocation(
+          id: existing.id,
+          amount: newAmount,
+          lastUpdated: DateTime.now(),
+          rideIds: existing.rideIds,
+        );
+        await _localStorage.saveFuelAllocation(updated);
+      } else {
+        // Create new allocation even with negative values (advance refueling)
         final newAllocation = PendingFuelAllocation(
           id: 'current',
           amount: adjustmentAmount,

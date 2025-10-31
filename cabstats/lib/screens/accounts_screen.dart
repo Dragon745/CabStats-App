@@ -644,17 +644,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         );
         return;
       }
-
-      // Check if sufficient balance
-      if (amount > (_balances[_selectedFromAccount] ?? 0.0)) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Insufficient balance. Available: ₹${(_balances[_selectedFromAccount] ?? 0.0).toStringAsFixed(2)}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
+      // Note: Transfers are allowed even if balance goes negative
     }
 
     setState(() => _isSubmitting = true);

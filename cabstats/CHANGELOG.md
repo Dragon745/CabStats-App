@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-10-31
+
+### Added
+
+- Comprehensive README.md with project documentation, features, installation guide, and developer information
+- **Expanded Usage Documentation**: Added detailed step-by-step usage guide covering:
+  - Complete first launch instructions
+  - Detailed ride management workflow (starting, during, ending rides)
+  - Account and balance management instructions
+  - Expense recording and analytics guide
+  - Fuel management walkthrough
+  - Tips management instructions
+  - Analytics and reporting features
+  - Advanced features (negative balances, offline-first)
+  - Sync data instructions
+  - Tips and best practices for daily use
+
+### Changed
+
+- **Fuel Management - Advance Refueling Support**: Removed restrictions that prevented fuel transfers and adjustments when there's no fuel allocation or when allocation is negative
+
+  - Transfer Fuel and Adjust actions now work even when there's no pending allocation
+  - Fuel allocation can go negative to support advance refueling scenarios
+  - When there's no allocation, users can still transfer fuel and make adjustments for future refueling
+  - Transfer amount "follows allocation" - pre-fills with allocation amount if available, otherwise allows manual entry
+  - Negative allocations are displayed with red styling and labeled as "Advance Refueling"
+  - UI clearly indicates when allocations are negative with helpful messaging
+
+- **Negative Account Balance Support**: Removed all restrictions preventing accounts from going negative
+  - Account transfers now allowed even when source account has insufficient balance
+  - Expenses can be recorded even when account balance is insufficient (shows informational message)
+  - Fuel transfers allowed even when source account balance is insufficient
+  - All balance validation checks removed from UI and service layers
+  - Users can now spend in advance and track negative balances for better financial planning
+
 ## [2.0.0] - 2025-10-31
 
 ### Added
@@ -478,9 +513,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Step-by-step ride ending wizard with auto-focus
     - Detailed ride statistics and performance metrics
     - Account balance integration with transaction logging
-
-## [Unreleased]
-
-### Added
-
-- Comprehensive README.md with project documentation, features, installation guide, and developer information

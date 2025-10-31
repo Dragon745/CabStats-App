@@ -183,7 +183,8 @@ class _FuelScreenState extends State<FuelScreen> {
         const SizedBox(height: 24),
         
         // Pending Fuel Allocation Card
-        if (_pendingFuelAllocation != null && _pendingFuelAllocation!.amount > 0)
+        // Always show allocation card, even if null or negative (for advance refueling)
+        if (_pendingFuelAllocation != null)
           _buildPendingAllocationCard()
         else
           _buildNoAllocationCard(),
@@ -283,19 +284,24 @@ class _FuelScreenState extends State<FuelScreen> {
 
   Widget _buildPendingAllocationCard() {
     final allocation = _pendingFuelAllocation!;
+    final isNegative = allocation.amount < 0;
     
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.orange.shade400, Colors.orange.shade600],
+          colors: isNegative 
+              ? [Colors.red.shade400, Colors.red.shade600]
+              : [Colors.orange.shade400, Colors.orange.shade600],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.orange.shade200,
+            color: isNegative 
+                ? Colors.red.shade200
+                : Colors.orange.shade200,
             spreadRadius: 2,
             blurRadius: 8,
             offset: const Offset(0, 4),
@@ -334,24 +340,38 @@ class _FuelScreenState extends State<FuelScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            '₹${allocation.amount.toStringAsFixed(2)}',
+            '₹${allocation.amount.abs().toStringAsFixed(2)}',
             style: const TextStyle(
               fontSize: 32,
               fontWeight: FontWeight.bold,
               color: Colors.white,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'From ${allocation.rideIds.length} ride${allocation.rideIds.length > 1 ? 's' : ''}',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.white.withOpacity(0.9),
+          if (isNegative) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Negative (Advance Refueling)',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.9),
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
+          ] else ...[
+            const SizedBox(height: 4),
+            Text(
+              'From ${allocation.rideIds.length} ride${allocation.rideIds.length > 1 ? 's' : ''}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.9),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Text(
-            'Ready to transfer to Fuel Reserve',
+            isNegative
+                ? 'Advance refueling - will be balanced when rides complete'
+                : 'Ready to transfer to Fuel Reserve',
             style: TextStyle(
               fontSize: 12,
               color: Colors.white.withOpacity(0.8),
@@ -422,9 +442,7 @@ class _FuelScreenState extends State<FuelScreen> {
                 title: 'Transfer Fuel',
                 subtitle: 'Move allocation to Fuel Reserve',
                 color: Colors.orange,
-                onTap: _pendingFuelAllocation != null && _pendingFuelAllocation!.amount > 0
-                    ? _showFuelTransferDialog
-                    : null,
+                onTap: _showFuelTransferDialog,
               ),
             ),
             const SizedBox(width: 12),
@@ -434,9 +452,7 @@ class _FuelScreenState extends State<FuelScreen> {
                 title: 'Adjust',
                 subtitle: 'Modify allocation amount',
                 color: Colors.blue,
-                onTap: _pendingFuelAllocation != null && _pendingFuelAllocation!.amount > 0
-                    ? _showAdjustmentDialog
-                    : null,
+                onTap: _showAdjustmentDialog,
               ),
             ),
           ],
@@ -450,7 +466,7 @@ class _FuelScreenState extends State<FuelScreen> {
                 title: 'Clear All',
                 subtitle: 'Remove all allocation',
                 color: Colors.red,
-                onTap: _pendingFuelAllocation != null && _pendingFuelAllocation!.amount > 0
+                onTap: _pendingFuelAllocation != null
                     ? _showClearDialog
                     : null,
               ),
@@ -530,7 +546,7 @@ class _FuelScreenState extends State<FuelScreen> {
         builder: (context) => FuelTransferScreen(
           accounts: _accounts,
           balances: _balances,
-          pendingAllocation: _pendingFuelAllocation!,
+          pendingAllocation: _pendingFuelAllocation,
           onTransferComplete: _loadData,
         ),
       ),
@@ -542,7 +558,7 @@ class _FuelScreenState extends State<FuelScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => FuelAdjustmentScreen(
-          pendingAllocation: _pendingFuelAllocation!,
+          pendingAllocation: _pendingFuelAllocation,
           onAdjustmentComplete: _loadData,
         ),
       ),
@@ -648,14 +664,14 @@ class _FuelScreenState extends State<FuelScreen> {
 class FuelTransferScreen extends StatefulWidget {
   final List<Account> accounts;
   final Map<String, double> balances;
-  final PendingFuelAllocation pendingAllocation;
+  final PendingFuelAllocation? pendingAllocation;
   final VoidCallback onTransferComplete;
 
   const FuelTransferScreen({
     super.key,
     required this.accounts,
     required this.balances,
-    required this.pendingAllocation,
+    this.pendingAllocation,
     required this.onTransferComplete,
   });
 
@@ -675,7 +691,10 @@ class _FuelTransferScreenState extends State<FuelTransferScreen> {
   void initState() {
     super.initState();
     _selectedFromAccount = 'federal_bank'; // Default to Main Account
-    _amountController.text = widget.pendingAllocation.amount.toStringAsFixed(2);
+    // Follow allocation if available, otherwise leave empty for manual entry
+    if (widget.pendingAllocation != null) {
+      _amountController.text = widget.pendingAllocation!.amount.abs().toStringAsFixed(2);
+    }
   }
 
   @override
@@ -697,10 +716,7 @@ class _FuelTransferScreenState extends State<FuelTransferScreen> {
       return;
     }
 
-    if (_fromAccountBalance < amount) {
-      _showError('Insufficient balance in selected account');
-      return;
-    }
+    // Note: Fuel transfers are allowed even if balance goes negative
 
     setState(() => _isLoading = true);
 
@@ -763,47 +779,98 @@ class _FuelTransferScreenState extends State<FuelTransferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Pending Allocation Display
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.orange.shade400, Colors.orange.shade600],
+                  // Pending Allocation Display (only if exists)
+                  if (widget.pendingAllocation != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: widget.pendingAllocation!.amount < 0
+                              ? [Colors.red.shade400, Colors.red.shade600]
+                              : [Colors.orange.shade400, Colors.orange.shade600],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      borderRadius: BorderRadius.circular(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Pending Fuel Allocation',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '₹${widget.pendingAllocation!.amount.abs().toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (widget.pendingAllocation!.amount < 0) ...[
+                            Text(
+                              'Negative (Advance Refueling)',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ] else ...[
+                            Text(
+                              'From ${widget.pendingAllocation!.rideIds.length} ride${widget.pendingAllocation!.rideIds.length > 1 ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Pending Fuel Allocation',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
+                    const SizedBox(height: 32),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.grey.shade400,
+                            size: 32,
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '₹${widget.pendingAllocation.amount.toStringAsFixed(2)}',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                          const SizedBox(height: 8),
+                          Text(
+                            'No Fuel Allocation',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
-                        ),
-                        Text(
-                          'From ${widget.pendingAllocation.rideIds.length} ride${widget.pendingAllocation.rideIds.length > 1 ? 's' : ''}',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.9),
+                          const SizedBox(height: 4),
+                          Text(
+                            'You can transfer fuel in advance for future refueling',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade500,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 32),
+                  ],
 
                   // Transfer Section
                   const Text(
@@ -903,7 +970,7 @@ class _FuelTransferScreenState extends State<FuelTransferScreen> {
                       if (value == null || value.isEmpty) return 'Please enter amount';
                       final amount = double.tryParse(value);
                       if (amount == null || amount <= 0) return 'Please enter a valid amount';
-                      if (amount > _fromAccountBalance) return 'Amount exceeds available balance';
+                      // Note: Amount validation removed - transfers allowed even if balance goes negative
                       return null;
                     },
                   ),
@@ -945,12 +1012,12 @@ class _FuelTransferScreenState extends State<FuelTransferScreen> {
 
 // Fuel Adjustment Screen
 class FuelAdjustmentScreen extends StatefulWidget {
-  final PendingFuelAllocation pendingAllocation;
+  final PendingFuelAllocation? pendingAllocation;
   final VoidCallback onAdjustmentComplete;
 
   const FuelAdjustmentScreen({
     super.key,
-    required this.pendingAllocation,
+    this.pendingAllocation,
     required this.onAdjustmentComplete,
   });
 
@@ -1037,46 +1104,97 @@ class _FuelAdjustmentScreenState extends State<FuelAdjustmentScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Current Allocation Display
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.blue.shade400, Colors.blue.shade600],
+                if (widget.pendingAllocation != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: widget.pendingAllocation!.amount < 0
+                            ? [Colors.red.shade400, Colors.red.shade600]
+                            : [Colors.blue.shade400, Colors.blue.shade600],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    borderRadius: BorderRadius.circular(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Current Fuel Allocation',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '₹${widget.pendingAllocation!.amount.abs().toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        if (widget.pendingAllocation!.amount < 0) ...[
+                          Text(
+                            'Negative (Advance Refueling)',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ] else ...[
+                          Text(
+                            'From ${widget.pendingAllocation!.rideIds.length} ride${widget.pendingAllocation!.rideIds.length > 1 ? 's' : ''}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Current Fuel Allocation',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white,
+                  const SizedBox(height: 32),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: Colors.grey.shade400,
+                          size: 32,
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '₹${widget.pendingAllocation.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        const SizedBox(height: 8),
+                        Text(
+                          'No Fuel Allocation',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
-                      Text(
-                        'From ${widget.pendingAllocation.rideIds.length} ride${widget.pendingAllocation.rideIds.length > 1 ? 's' : ''}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.white.withOpacity(0.9),
+                        const SizedBox(height: 4),
+                        Text(
+                          'You can adjust allocation to create advance refueling',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                
-                const SizedBox(height: 32),
+                  const SizedBox(height: 32),
+                ],
 
                 // Adjustment Section
                 const Text(

@@ -177,27 +177,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final amount = double.parse(_amountController.text);
       final description = _descriptionController.text.trim();
       
-      // Check if account has sufficient balance
+      // Inform user if balance will go negative (non-blocking)
       final currentBalance = _accountBalances[_selectedAccountId!] ?? 0.0;
-      if (currentBalance < amount) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Insufficient balance. Available: ₹${currentBalance.toStringAsFixed(2)}, Required: ₹${amount.toStringAsFixed(2)}'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-        return;
-      }
-
-      // Warn if balance will go negative
       final newBalance = currentBalance - amount;
       if (newBalance < 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Warning: This expense will result in a negative balance of ₹${newBalance.abs().toStringAsFixed(2)}'),
-            backgroundColor: Colors.orange,
-            duration: const Duration(seconds: 5),
+            content: Text('Note: This expense will result in a negative balance of ₹${newBalance.abs().toStringAsFixed(2)}'),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 3),
           ),
         );
       }
