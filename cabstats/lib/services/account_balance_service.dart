@@ -1,10 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:math';
 import '../models/account.dart';
 import '../models/ledger_entry.dart';
 import '../models/account_transfer.dart';
 import '../models/pending_fuel_allocation.dart';
 import '../models/refuel.dart';
+import '../models/pending_tips.dart';
+import '../models/account_balance.dart';
+import 'local_storage_service.dart';
+import '../utils/debug_logger.dart';
 
 class AccountBalanceService {
   static final AccountBalanceService _instance = AccountBalanceService._internal();
@@ -13,9 +18,18 @@ class AccountBalanceService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final LocalStorageService _localStorage = LocalStorageService();
+  final Random _random = Random();
 
   // Get current user ID
   String? get _currentUserId => _auth.currentUser?.uid;
+
+  // Generate unique IDs for new documents
+  String _generateId(String prefix) {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = _random.nextInt(10000);
+    return '${prefix}_${timestamp}_$random';
+  }
 
   // Get account balances collection for current user
   CollectionReference get _balancesRef {
@@ -68,34 +82,44 @@ class AccountBalanceService {
     return _firestore.collection('users').doc(_currentUserId!).collection('pendingFuelAllocation');
   }
 
+  // Get pending tips collection for current user
+  CollectionReference get _pendingTipsRef {
+    if (_currentUserId == null) {
+      print('❌ AccountBalanceService: User not authenticated');
+      throw Exception('User not authenticated');
+    }
+    return _firestore.collection('users').doc(_currentUserId!).collection('pendingTips');
+  }
+
   // Create account balance document if it doesn't exist
   Future<bool> ensureAccountBalanceExists(String accountId) async {
     try {
-      final doc = await _balancesRef.doc(accountId).get();
+      final existing = await _localStorage.getAccountBalance(accountId);
       
-      if (!doc.exists) {
-        print('Creating account balance document for $accountId');
+      if (existing == null) {
+        DebugLogger.log('Creating account balance document for $accountId');
         final accounts = Account.getSampleAccounts();
         final account = accounts.firstWhere(
           (a) => a.id == accountId,
           orElse: () => accounts.first,
         );
         
-        await _balancesRef.doc(accountId).set({
-          'accountId': accountId,
-          'accountName': account.name,
-          'accountType': account.type,
-          'balance': 0.0, // Start with zero balance
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
+        final newBalance = AccountBalance(
+          accountId: accountId,
+          accountName: account.name,
+          accountType: account.type,
+          balance: 0.0,
+          lastUpdated: DateTime.now(),
+        );
         
-        print('Created account balance document for $accountId');
+        await _localStorage.saveAccountBalance(newBalance);
+        DebugLogger.log('Created account balance document for $accountId');
         return true;
       }
       
       return true; // Already exists
     } catch (e) {
-      print('Error ensuring account balance exists for $accountId: $e');
+      DebugLogger.logError('Error ensuring account balance exists for $accountId: $e');
       return false;
     }
   }
@@ -103,10 +127,10 @@ class AccountBalanceService {
   // Check if account balances are already initialized
   Future<bool> areAccountBalancesInitialized() async {
     try {
-      final snapshot = await _balancesRef.limit(1).get();
-      return snapshot.docs.isNotEmpty;
+      final balances = await _localStorage.getAllAccountBalances();
+      return balances.isNotEmpty;
     } catch (e) {
-      print('Error checking if account balances are initialized: $e');
+      DebugLogger.logError('Error checking if account balances are initialized: $e');
       return false;
     }
   }
@@ -114,39 +138,40 @@ class AccountBalanceService {
   // Initialize account balances (call this once when user first signs up)
   Future<void> initializeAccountBalances() async {
     try {
-      print('Starting account balance initialization...');
-      print('Current user ID: $_currentUserId');
+      DebugLogger.log('Starting account balance initialization...');
+      DebugLogger.log('Current user ID: $_currentUserId');
       
       if (_currentUserId == null) {
-        print('ERROR: User not authenticated');
+        DebugLogger.logError('User not authenticated');
         throw Exception('User not authenticated');
       }
       
       // Check if already initialized
       final alreadyInitialized = await areAccountBalancesInitialized();
       if (alreadyInitialized) {
-        print('Account balances already initialized, skipping...');
+        DebugLogger.log('Account balances already initialized, skipping...');
         return;
       }
       
       final accounts = Account.getSampleAccounts();
-      print('Sample accounts: ${accounts.length}');
+      DebugLogger.log('Sample accounts: ${accounts.length}');
       
       for (final account in accounts) {
-        print('Creating account balance for: ${account.id}');
-        await _balancesRef.doc(account.id).set({
-          'accountId': account.id,
-          'accountName': account.name,
-          'accountType': account.type,
-          'balance': account.balance,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
-        print('Created account balance for: ${account.id}');
+        DebugLogger.log('Creating account balance for: ${account.id}');
+        final accountBalance = AccountBalance(
+          accountId: account.id,
+          accountName: account.name,
+          accountType: account.type,
+          balance: account.balance,
+          lastUpdated: DateTime.now(),
+        );
+        await _localStorage.saveAccountBalance(accountBalance);
+        DebugLogger.log('Created account balance for: ${account.id}');
       }
       
-      print('Account balances initialized successfully');
+      DebugLogger.logSuccess('Account balances initialized successfully');
     } catch (e) {
-      print('Error initializing account balances: $e');
+      DebugLogger.logError('Error initializing account balances: $e');
       rethrow; // Re-throw to show error in UI
     }
   }
@@ -154,23 +179,18 @@ class AccountBalanceService {
   // Get current balance for an account (returns 0 if document doesn't exist)
   Future<double> getAccountBalance(String accountId) async {
     try {
-      print('🔍 Fetching balance for account: $accountId');
-      print('📁 Collection path: users/$_currentUserId/accountBalances/$accountId');
+      DebugLogger.log('Fetching balance for account: $accountId');
       
-      final doc = await _balancesRef.doc(accountId).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        final balance = (data['balance'] as num).toDouble();
-        print('✅ Found balance document: ₹${balance.toStringAsFixed(2)}');
-        return balance;
+      final accountBalance = await _localStorage.getAccountBalance(accountId);
+      if (accountBalance != null) {
+        DebugLogger.log('Found balance document: ₹${accountBalance.balance.toStringAsFixed(2)}');
+        return accountBalance.balance;
       } else {
-        print('⚠️ Account balance document for $accountId does not exist, returning 0');
-        print('💡 This is normal for first-time users - documents will be created during transactions');
+        DebugLogger.log('Account balance document for $accountId does not exist, returning 0');
         return 0.0;
       }
     } catch (e) {
-      print('❌ Error getting account balance for $accountId: $e');
-      print('🔗 If this is a Firestore error, check your Firebase Console for the collection structure');
+      DebugLogger.logError('Error getting account balance for $accountId: $e');
       return 0.0;
     }
   }
@@ -178,17 +198,10 @@ class AccountBalanceService {
   // Get all account balances
   Future<List<Map<String, dynamic>>> getAllAccountBalances() async {
     try {
-      final snapshot = await _balancesRef.get();
-      List<Map<String, dynamic>> balances = [];
-      
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        balances.add(data);
-      }
-      
-      return balances;
+      final balanceObjects = await _localStorage.getAllAccountBalanceObjects();
+      return balanceObjects.values.map((balance) => balance.toJson()).toList();
     } catch (e) {
-      print('Error getting all account balances: $e');
+      DebugLogger.logError('Error getting all account balances: $e');
       return [];
     }
   }
@@ -196,18 +209,19 @@ class AccountBalanceService {
   // Update account balance (creates document if it doesn't exist)
   Future<bool> updateAccountBalance(String accountId, double newBalance) async {
     try {
-      print('Updating account balance for $accountId to $newBalance');
+      DebugLogger.log('Updating account balance for $accountId to $newBalance');
       
-      // Check if document exists
-      final doc = await _balancesRef.doc(accountId).get();
+      final existing = await _localStorage.getAccountBalance(accountId);
+      final now = DateTime.now();
       
-      if (doc.exists) {
+      if (existing != null) {
         // Update existing document
-        await _balancesRef.doc(accountId).update({
-          'balance': newBalance,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
-        print('Updated existing account balance for $accountId');
+        final updated = existing.copyWith(
+          balance: newBalance,
+          lastUpdated: now,
+        );
+        await _localStorage.saveAccountBalance(updated);
+        DebugLogger.log('Updated existing account balance for $accountId');
       } else {
         // Create new document with default values
         final accounts = Account.getSampleAccounts();
@@ -216,19 +230,20 @@ class AccountBalanceService {
           orElse: () => accounts.first,
         );
         
-        await _balancesRef.doc(accountId).set({
-          'accountId': accountId,
-          'accountName': account.name,
-          'accountType': account.type,
-          'balance': newBalance,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
-        print('Created new account balance document for $accountId');
+        final newAccountBalance = AccountBalance(
+          accountId: accountId,
+          accountName: account.name,
+          accountType: account.type,
+          balance: newBalance,
+          lastUpdated: now,
+        );
+        await _localStorage.saveAccountBalance(newAccountBalance);
+        DebugLogger.log('Created new account balance document for $accountId');
       }
       
       return true;
     } catch (e) {
-      print('Error updating account balance for $accountId: $e');
+      DebugLogger.logError('Error updating account balance for $accountId: $e');
       return false;
     }
   }
@@ -245,10 +260,10 @@ class AccountBalanceService {
     String? reference,
   }) async {
     try {
-      print('Adding transaction: $type $amount to account $accountId');
+      DebugLogger.log('Adding transaction: $type $amount to account $accountId');
       
       // Create ledger entry
-      final ledgerId = _ledgerRef.doc().id;
+      final ledgerId = _generateId('ledger');
       final ledgerEntry = LedgerEntry(
         id: ledgerId,
         accountId: accountId,
@@ -263,8 +278,8 @@ class AccountBalanceService {
       );
 
       // Add to ledger
-      await _ledgerRef.doc(ledgerId).set(ledgerEntry.toJson());
-      print('Added ledger entry: ${ledgerEntry.formattedAmount}');
+      await _localStorage.saveLedgerEntry(ledgerEntry);
+      DebugLogger.log('Added ledger entry: ${ledgerEntry.formattedAmount}');
 
       // Update account balance (this will create document if it doesn't exist)
       final currentBalance = await getAccountBalance(accountId);
@@ -274,10 +289,10 @@ class AccountBalanceService {
       
       await updateAccountBalance(accountId, newBalance);
 
-      print('Transaction completed: ${ledgerEntry.formattedAmount} to account $accountId');
+      DebugLogger.log('Transaction completed: ${ledgerEntry.formattedAmount} to account $accountId');
       return true;
     } catch (e) {
-      print('Error adding transaction: $e');
+      DebugLogger.logError('Error adding transaction: $e');
       return false;
     }
   }
@@ -291,91 +306,67 @@ class AccountBalanceService {
   }) async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return false;
       }
 
       // Validate inputs
       if (amount <= 0) {
-        print('❌ Transfer amount must be greater than 0');
+        DebugLogger.logError('Transfer amount must be greater than 0');
         return false;
       }
 
       if (fromAccountId == toAccountId) {
-        print('❌ Cannot transfer to the same account');
+        DebugLogger.logError('Cannot transfer to the same account');
         return false;
       }
 
       // Check if source account has sufficient balance
-      final fromBalance = await getAccountBalance(fromAccountId);
-      if (fromBalance < amount) {
-        print('❌ Insufficient balance in source account. Available: ₹$fromBalance, Required: ₹$amount');
-        return false;
+      final fromBalanceObj = await _localStorage.getAccountBalance(fromAccountId);
+      if (fromBalanceObj == null || fromBalanceObj.balance < amount) {
+        final available = fromBalanceObj?.balance ?? 0.0;
+        DebugLogger.logError('Insufficient balance in source account. Available: ₹$available, Required: ₹$amount');
+        throw Exception('Insufficient balance in source account');
       }
 
       // Ensure both account balance documents exist
       await ensureAccountBalanceExists(fromAccountId);
       await ensureAccountBalanceExists(toAccountId);
 
-      print('💸 Transferring ₹${amount.toStringAsFixed(2)} from $fromAccountId to $toAccountId');
+      DebugLogger.log('Transferring ₹${amount.toStringAsFixed(2)} from $fromAccountId to $toAccountId');
 
-      // Use Firestore transaction for atomicity
-      try {
-        return await _firestore.runTransaction<bool>((transaction) async {
-          // First, validate balances exist within transaction
-          final fromDoc = await transaction.get(_balancesRef.doc(fromAccountId));
-          final toDoc = await transaction.get(_balancesRef.doc(toAccountId));
+      // Get current balances
+      final fromBalance = await _localStorage.getAccountBalance(fromAccountId);
+      final toBalance = await _localStorage.getAccountBalance(toAccountId);
 
-          if (!fromDoc.exists) {
-            throw Exception('Source account balance document not found');
-          }
-
-          if (!toDoc.exists) {
-            throw Exception('Destination account balance document not found');
-          }
-
-          // Check balance within transaction
-          final fromBalanceData = fromDoc.data() as Map<String, dynamic>;
-          final currentFromBalance = (fromBalanceData['balance'] as num).toDouble();
-          
-          if (currentFromBalance < amount) {
-            throw Exception('Insufficient balance in source account');
-          }
-
-          // Update balances within transaction
-          transaction.update(_balancesRef.doc(fromAccountId), {
-            'balance': FieldValue.increment(-amount),
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
-
-          transaction.update(_balancesRef.doc(toAccountId), {
-            'balance': FieldValue.increment(amount),
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
-
-          // Create transfer record with transaction timestamp
-          final transferId = _transfersRef.doc().id;
-          final transfer = AccountTransfer(
-            id: transferId,
-            fromAccountId: fromAccountId,
-            toAccountId: toAccountId,
-            amount: amount,
-            note: note,
-            timestamp: DateTime.now(),
-          );
-
-          // Save transfer record within transaction
-          transaction.set(_transfersRef.doc(transferId), transfer.toJson());
-
-          print('✅ Transfer completed successfully');
-          return true;
-        });
-      } catch (e) {
-        // Re-throw the exception so UI can handle it
-        throw Exception('Transfer failed: ${e.toString()}');
+      if (fromBalance == null || toBalance == null) {
+        throw Exception('Account balance documents not found');
       }
+
+      final now = DateTime.now();
+
+      // Update balances (local storage operations are atomic)
+      await _localStorage.updateAccountBalance(fromAccountId, fromBalance.balance - amount);
+      await _localStorage.updateAccountBalance(toAccountId, toBalance.balance + amount);
+
+      // Create transfer record
+      final transferId = _generateId('transfer');
+      final transfer = AccountTransfer(
+        id: transferId,
+        fromAccountId: fromAccountId,
+        toAccountId: toAccountId,
+        amount: amount,
+        note: note,
+        timestamp: now,
+      );
+
+      // Save transfer record
+      await _localStorage.saveTransfer(transfer);
+
+      DebugLogger.logSuccess('Transfer completed successfully');
+      return true;
     } catch (e) {
-      print('❌ Error transferring between accounts: $e');
+      DebugLogger.logError('Error transferring between accounts: $e');
       // Re-throw so UI can show specific error message
       rethrow;
     }
@@ -384,21 +375,11 @@ class AccountBalanceService {
   // Get ledger entries for an account
   Future<List<LedgerEntry>> getAccountLedger(String accountId, {int limit = 50}) async {
     try {
-      final snapshot = await _ledgerRef
-          .where('accountId', isEqualTo: accountId)
-          .orderBy('timestamp', descending: true)
-          .limit(limit)
-          .get();
-
-      List<LedgerEntry> entries = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        entries.add(LedgerEntry.fromJson(data));
-      }
-
-      return entries;
+      final entries = await _localStorage.getLedgerEntriesByAccount(accountId);
+      entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return entries.take(limit).toList();
     } catch (e) {
-      print('Error getting account ledger: $e');
+      DebugLogger.logError('Error getting account ledger: $e');
       return [];
     }
   }
@@ -406,20 +387,9 @@ class AccountBalanceService {
   // Get all ledger entries
   Future<List<LedgerEntry>> getAllLedgerEntries({int limit = 100}) async {
     try {
-      final snapshot = await _ledgerRef
-          .orderBy('timestamp', descending: true)
-          .limit(limit)
-          .get();
-
-      List<LedgerEntry> entries = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        entries.add(LedgerEntry.fromJson(data));
-      }
-
-      return entries;
+      return await _localStorage.getRecentLedgerEntries(limit: limit);
     } catch (e) {
-      print('Error getting all ledger entries: $e');
+      DebugLogger.logError('Error getting all ledger entries: $e');
       return [];
     }
   }
@@ -489,50 +459,30 @@ class AccountBalanceService {
 
   // Stream for account balance updates
   Stream<Map<String, double>> getAccountBalancesStream() {
-    return _balancesRef.snapshots().map((snapshot) {
-      Map<String, double> balances = {};
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        balances[data['accountId']] = (data['balance'] as num).toDouble();
-      }
-      return balances;
-    });
+    try {
+      return _localStorage.getAccountBalancesStream();
+    } catch (e) {
+      DebugLogger.logError('Error getting account balances stream: $e');
+      return Stream.value({});
+    }
   }
 
   // Get recent transactions
   Future<List<LedgerEntry>> getRecentTransactions({int limit = 20}) async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return [];
       }
 
-      print('📝 Fetching recent transactions (limit: $limit)');
+      DebugLogger.log('Fetching recent transactions (limit: $limit)');
       
-      final querySnapshot = await _ledgerRef
-          .orderBy('timestamp', descending: true)
-          .limit(limit)
-          .get();
-
-      final transactions = <LedgerEntry>[];
+      final transactions = await _localStorage.getRecentLedgerEntries(limit: limit);
       
-      for (final doc in querySnapshot.docs) {
-        try {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id; // Add document ID
-          
-          final transaction = LedgerEntry.fromJson(data);
-          transactions.add(transaction);
-        } catch (e) {
-          print('⚠️ Error parsing transaction ${doc.id}: $e');
-          // Continue with other transactions
-        }
-      }
-
-      print('✅ Retrieved ${transactions.length} recent transactions');
+      DebugLogger.log('Retrieved ${transactions.length} recent transactions');
       return transactions;
     } catch (e) {
-      print('❌ Error fetching recent transactions: $e');
+      DebugLogger.logError('Error fetching recent transactions: $e');
       return [];
     }
   }
@@ -541,82 +491,94 @@ class AccountBalanceService {
   Future<List<AccountTransfer>> getRecentTransfers({int limit = 20}) async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return [];
       }
 
-      print('💸 Fetching recent transfers (limit: $limit)');
+      DebugLogger.log('Fetching recent transfers (limit: $limit)');
       
-      final querySnapshot = await _transfersRef
-          .orderBy('timestamp', descending: true)
-          .limit(limit)
-          .get();
-
-      final transfers = <AccountTransfer>[];
+      final transfers = await _localStorage.getRecentTransfers(limit: limit);
       
-      for (final doc in querySnapshot.docs) {
-        try {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id; // Add document ID
-          
-          final transfer = AccountTransfer.fromJson(data);
-          transfers.add(transfer);
-        } catch (e) {
-          print('⚠️ Error parsing transfer ${doc.id}: $e');
-          // Continue with other transfers
-        }
-      }
-
-      print('✅ Retrieved ${transfers.length} recent transfers');
+      DebugLogger.log('Retrieved ${transfers.length} recent transfers');
       return transfers;
     } catch (e) {
-      print('❌ Error fetching recent transfers: $e');
+      DebugLogger.logError('Error fetching recent transfers: $e');
       return [];
     }
   }
 
-  // Delete all account-related data for the current user
+  // Delete all account-related data for the current user (both local and Firestore)
   Future<bool> deleteAllAccountData() async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return false;
       }
 
-      print('🗑️ Deleting all account data for user: $_currentUserId');
+      DebugLogger.log('Deleting all account data for user: $_currentUserId (local and Firestore)');
 
-      // Delete all account balances
-      final balancesSnapshot = await _balancesRef.get();
-      for (final doc in balancesSnapshot.docs) {
-        await doc.reference.delete();
-        print('✅ Deleted account balance: ${doc.id}');
+      // Delete from local storage first
+      await _localStorage.clearAllData();
+      DebugLogger.log('Local data cleared');
+
+      // Delete from Firestore - all collections
+      try {
+        final userRef = _firestore.collection('users').doc(_currentUserId!);
+        
+        // Collections to delete
+        final collections = [
+          'accountBalances',
+          'ledger',
+          'accountTransfers',
+          'refuels',
+          'pendingFuelAllocation',
+          'pendingTips',
+        ];
+        
+        // Delete each collection
+        for (final collectionName in collections) {
+          try {
+            final collectionRef = userRef.collection(collectionName);
+            final snapshot = await collectionRef.get();
+            
+            // Batch delete
+            final batches = <WriteBatch>[];
+            WriteBatch? currentBatch;
+            int operationCount = 0;
+            
+            for (final doc in snapshot.docs) {
+              if (currentBatch == null || operationCount >= 450) {
+                currentBatch = _firestore.batch();
+                batches.add(currentBatch);
+                operationCount = 0;
+              }
+              
+              currentBatch.delete(doc.reference);
+              operationCount++;
+            }
+            
+            // Execute all batches for this collection
+            for (final batch in batches) {
+              await batch.commit();
+            }
+            
+            DebugLogger.log('Deleted ${snapshot.docs.length} documents from Firestore collection: $collectionName');
+          } catch (collectionError) {
+            DebugLogger.logError('Error deleting collection $collectionName: $collectionError');
+            // Continue with other collections
+          }
+        }
+        
+        DebugLogger.logSuccess('All Firestore account data deleted successfully');
+      } catch (firestoreError) {
+        DebugLogger.logError('Error deleting account data from Firestore (local deletion succeeded): $firestoreError');
+        // Continue - local deletion succeeded
       }
 
-      // Delete all ledger entries
-      final ledgerSnapshot = await _ledgerRef.get();
-      for (final doc in ledgerSnapshot.docs) {
-        await doc.reference.delete();
-        print('✅ Deleted ledger entry: ${doc.id}');
-      }
-
-      // Delete all account transfers
-      final transfersSnapshot = await _transfersRef.get();
-      for (final doc in transfersSnapshot.docs) {
-        await doc.reference.delete();
-        print('✅ Deleted account transfer: ${doc.id}');
-      }
-
-      // Delete pending fuel allocation
-      final fuelAllocationSnapshot = await _pendingFuelAllocationRef.get();
-      for (final doc in fuelAllocationSnapshot.docs) {
-        await doc.reference.delete();
-        print('✅ Deleted fuel allocation: ${doc.id}');
-      }
-
-      print('✅ All account data deleted successfully');
+      DebugLogger.logSuccess('All account data deleted successfully (local and Firestore)');
       return true;
     } catch (e) {
-      print('❌ Error deleting account data: $e');
+      DebugLogger.logError('Error deleting account data: $e');
       return false;
     }
   }
@@ -626,34 +588,33 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      final doc = _pendingFuelAllocationRef.doc('current');
-      final snapshot = await doc.get();
+      final existing = await _localStorage.getPendingFuelAllocation();
+      final now = DateTime.now();
       
-      if (snapshot.exists) {
+      if (existing != null) {
         // Update existing allocation
-        final data = snapshot.data() as Map<String, dynamic>;
-        final currentAmount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-        final rideIds = List<String>.from(data['rideIds'] ?? []);
-        
-        await doc.update({
-          'amount': currentAmount + amount,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          'rideIds': [...rideIds, rideId],
-        });
+        final updated = PendingFuelAllocation(
+          id: existing.id,
+          amount: existing.amount + amount,
+          lastUpdated: now,
+          rideIds: [...existing.rideIds, rideId],
+        );
+        await _localStorage.saveFuelAllocation(updated);
       } else {
         // Create new allocation
-        await doc.set({
-          'id': 'current',
-          'amount': amount,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          'rideIds': [rideId],
-        });
+        final newAllocation = PendingFuelAllocation(
+          id: 'current',
+          amount: amount,
+          lastUpdated: now,
+          rideIds: [rideId],
+        );
+        await _localStorage.saveFuelAllocation(newAllocation);
       }
       
-      print('✅ Added fuel allocation: ₹$amount from ride $rideId');
+      DebugLogger.log('Added fuel allocation: ₹$amount from ride $rideId');
       return true;
     } catch (e) {
-      print('❌ Error adding fuel allocation: $e');
+      DebugLogger.logError('Error adding fuel allocation: $e');
       return false;
     }
   }
@@ -662,23 +623,21 @@ class AccountBalanceService {
   Future<PendingFuelAllocation?> getPendingFuelAllocation() async {
     try {
       if (_currentUserId == null) return null;
-      
-      final doc = await _pendingFuelAllocationRef.doc('current').get();
-      if (!doc.exists) return null;
-      
-      return PendingFuelAllocation.fromJson(doc.data() as Map<String, dynamic>);
+      return await _localStorage.getPendingFuelAllocation();
     } catch (e) {
-      print('❌ Error getting fuel allocation: $e');
+      DebugLogger.logError('Error getting fuel allocation: $e');
       return null;
     }
   }
 
   // Get pending fuel allocation stream for real-time updates
   Stream<PendingFuelAllocation?> getPendingFuelAllocationStream() {
-    return _pendingFuelAllocationRef.doc('current').snapshots().map((snapshot) {
-      if (!snapshot.exists) return null;
-      return PendingFuelAllocation.fromJson(snapshot.data() as Map<String, dynamic>);
-    });
+    try {
+      return _localStorage.getPendingFuelAllocationStream();
+    } catch (e) {
+      DebugLogger.logError('Error getting fuel allocation stream: $e');
+      return Stream.value(null);
+    }
   }
 
   // Transfer fuel allocation to Fuel Reserve account
@@ -701,29 +660,29 @@ class AccountBalanceService {
       if (!success) return false;
       
       // Update pending allocation (subtract transferred amount)
-      final doc = _pendingFuelAllocationRef.doc('current');
-      final snapshot = await doc.get();
+      final existing = await _localStorage.getPendingFuelAllocation();
       
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>;
-        final currentAmount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-        final newAmount = currentAmount - amount;
+      if (existing != null) {
+        final newAmount = existing.amount - amount;
         
         if (newAmount <= 0.01) {
           // Clear if amount is negligible
-          await doc.delete();
+          await _localStorage.clearPendingFuelAllocation();
         } else {
-          await doc.update({
-            'amount': newAmount,
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
+          final updated = PendingFuelAllocation(
+            id: existing.id,
+            amount: newAmount,
+            lastUpdated: DateTime.now(),
+            rideIds: existing.rideIds,
+          );
+          await _localStorage.saveFuelAllocation(updated);
         }
       }
       
-      print('✅ Transferred fuel allocation: ₹$amount');
+      DebugLogger.log('Transferred fuel allocation: ₹$amount');
       return true;
     } catch (e) {
-      print('❌ Error transferring fuel allocation: $e');
+      DebugLogger.logError('Error transferring fuel allocation: $e');
       return false;
     }
   }
@@ -733,37 +692,38 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      final doc = _pendingFuelAllocationRef.doc('current');
-      final snapshot = await doc.get();
+      final existing = await _localStorage.getPendingFuelAllocation();
       
-      if (snapshot.exists) {
-        final data = snapshot.data() as Map<String, dynamic>;
-        final currentAmount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-        final newAmount = currentAmount + adjustmentAmount;
+      if (existing != null) {
+        final newAmount = existing.amount + adjustmentAmount;
         
         if (newAmount <= 0) {
           // Delete if zero or negative
-          await doc.delete();
+          await _localStorage.clearPendingFuelAllocation();
         } else {
-          await doc.update({
-            'amount': newAmount,
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
+          final updated = PendingFuelAllocation(
+            id: existing.id,
+            amount: newAmount,
+            lastUpdated: DateTime.now(),
+            rideIds: existing.rideIds,
+          );
+          await _localStorage.saveFuelAllocation(updated);
         }
       } else if (adjustmentAmount > 0) {
         // Create new if doesn't exist and adjustment is positive
-        await doc.set({
-          'id': 'current',
-          'amount': adjustmentAmount,
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          'rideIds': [],
-        });
+        final newAllocation = PendingFuelAllocation(
+          id: 'current',
+          amount: adjustmentAmount,
+          lastUpdated: DateTime.now(),
+          rideIds: [],
+        );
+        await _localStorage.saveFuelAllocation(newAllocation);
       }
       
-      print('✅ Adjusted fuel allocation by: ₹$adjustmentAmount');
+      DebugLogger.log('Adjusted fuel allocation by: ₹$adjustmentAmount');
       return true;
     } catch (e) {
-      print('❌ Error adjusting fuel allocation: $e');
+      DebugLogger.logError('Error adjusting fuel allocation: $e');
       return false;
     }
   }
@@ -773,11 +733,138 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      await _pendingFuelAllocationRef.doc('current').delete();
-      print('✅ Cleared pending fuel allocation');
+      await _localStorage.clearPendingFuelAllocation();
+      DebugLogger.log('Cleared pending fuel allocation');
       return true;
     } catch (e) {
-      print('❌ Error clearing fuel allocation: $e');
+      DebugLogger.logError('Error clearing fuel allocation: $e');
+      return false;
+    }
+  }
+
+  // Add pending tip from a completed ride (accumulates positive tips only)
+  Future<bool> addPendingTip(double amount, String rideId) async {
+    try {
+      if (_currentUserId == null) return false;
+      if (amount <= 0) return true; // Ignore non-positive tips
+
+      final existing = await _localStorage.getCurrentPendingTips();
+      final now = DateTime.now();
+
+      if (existing != null) {
+        final updated = PendingTips(
+          id: existing.id,
+          amount: existing.amount + amount,
+          lastUpdated: now,
+          rideIds: [...existing.rideIds, rideId],
+        );
+        await _localStorage.savePendingTips(updated);
+      } else {
+        final newTips = PendingTips(
+          id: 'current',
+          amount: amount,
+          lastUpdated: now,
+          rideIds: [rideId],
+        );
+        await _localStorage.savePendingTips(newTips);
+      }
+
+      DebugLogger.log('Added pending tip: ₹$amount from ride $rideId');
+      return true;
+    } catch (e) {
+      DebugLogger.logError('Error adding pending tip: $e');
+      return false;
+    }
+  }
+
+  // Get current pending tips (amount + ride ids) - converted to Map for compatibility
+  Future<Map<String, dynamic>?> getPendingTips() async {
+    try {
+      if (_currentUserId == null) return null;
+      final tips = await _localStorage.getCurrentPendingTips();
+      if (tips == null) return null;
+      return {
+        'id': tips.id,
+        'amount': tips.amount,
+        'rideIds': tips.rideIds,
+        'lastUpdated': tips.lastUpdated.millisecondsSinceEpoch,
+      };
+    } catch (e) {
+      DebugLogger.logError('Error getting pending tips: $e');
+      return null;
+    }
+  }
+
+  // Stream for real-time pending tips - converted to Map for compatibility
+  Stream<Map<String, dynamic>?> getPendingTipsStream() {
+    try {
+      return _localStorage.getPendingTipsStream().map((tips) {
+        if (tips == null) return null;
+        return {
+          'id': tips.id,
+          'amount': tips.amount,
+          'rideIds': tips.rideIds,
+          'lastUpdated': tips.lastUpdated.millisecondsSinceEpoch,
+        };
+      });
+    } catch (e) {
+      DebugLogger.logError('Error getting pending tips stream: $e');
+      return Stream.value(null);
+    }
+  }
+
+  // Transfer pending tips to Savings (expense) from a given account (Main Account)
+  Future<bool> transferPendingTipsToSavings({
+    required double amount,
+    required String fromAccountId,
+  }) async {
+    try {
+      if (_currentUserId == null) return false;
+      if (amount <= 0) return false;
+
+      // Fetch current pending tips
+      final currentTips = await _localStorage.getCurrentPendingTips();
+      final currentAmount = currentTips?.amount ?? 0.0;
+      if (amount > currentAmount) return false;
+
+      final timestamp = DateTime.now();
+      final expenseId = _generateId('tips');
+
+      // Ensure account exists
+      await ensureAccountBalanceExists(fromAccountId);
+
+      // 1) Create ledger expense (saving) and debit the fromAccountId
+      await addTransaction(
+        accountId: fromAccountId,
+        rideId: '',
+        type: TransactionType.debit,
+        category: TransactionCategory.saving,
+        nature: TransactionNature.expense,
+        amount: amount,
+        description: 'Pending tips saved',
+        reference: 'pending_tips_transfer',
+      );
+
+      // 2) Decrement pending tips amount
+      if (currentTips != null) {
+        final newAmount = currentTips.amount - amount;
+        if (newAmount <= 0.01) {
+          await _localStorage.clearPendingTips();
+        } else {
+          final updated = PendingTips(
+            id: currentTips.id,
+            amount: newAmount,
+            lastUpdated: timestamp,
+            rideIds: currentTips.rideIds,
+          );
+          await _localStorage.savePendingTips(updated);
+        }
+      }
+
+      DebugLogger.log('Transferred pending tips to savings: ₹$amount');
+      return true;
+    } catch (e) {
+      DebugLogger.logError('Error transferring pending tips to savings: $e');
       return false;
     }
   }
@@ -787,17 +874,18 @@ class AccountBalanceService {
     try {
       if (_currentUserId == null) return false;
       
-      await _pendingFuelAllocationRef.doc('current').set({
-        'id': 'current',
-        'amount': 250.0,
-        'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        'rideIds': ['test_ride_1', 'test_ride_2'],
-      });
+      final testAllocation = PendingFuelAllocation(
+        id: 'current',
+        amount: 250.0,
+        lastUpdated: DateTime.now(),
+        rideIds: ['test_ride_1', 'test_ride_2'],
+      );
+      await _localStorage.saveFuelAllocation(testAllocation);
       
-      print('✅ Created test fuel allocation: ₹250.00');
+      DebugLogger.log('Created test fuel allocation: ₹250.00');
       return true;
     } catch (e) {
-      print('❌ Error creating test fuel allocation: $e');
+      DebugLogger.logError('Error creating test fuel allocation: $e');
       return false;
     }
   }
@@ -813,21 +901,24 @@ class AccountBalanceService {
       if (_currentUserId == null) return false;
       
       final timestamp = DateTime.now();
+      final refuelId = _generateId('refuel');
       
       // 1. Add to refuels collection
-      final refuelDoc = await _refuelsRef.add({
-        'cost': cost,
-        'kilometers': kilometers,
-        'timestamp': timestamp.millisecondsSinceEpoch,
-        'location': location,
-        'notes': notes,
-      });
+      final refuel = Refuel(
+        id: refuelId,
+        cost: cost,
+        kilometers: kilometers,
+        timestamp: timestamp,
+        location: location,
+        notes: notes,
+      );
+      await _localStorage.saveRefuel(refuel);
       
       // 2. Add to ledger as expense
       final ledgerSuccess = await addTransaction(
         accountId: 'axis_bank', // Fuel Reserve account
-        rideId: 'refuel_${timestamp.millisecondsSinceEpoch}', // Unique refuel ID
-        amount: cost, // Positive value - debit type will subtract it
+        rideId: refuelId,
+        amount: cost,
         type: TransactionType.debit,
         category: TransactionCategory.fuel,
         nature: TransactionNature.expense,
@@ -836,52 +927,35 @@ class AccountBalanceService {
       
       if (!ledgerSuccess) {
         // If ledger fails, delete the refuel record
-        await refuelDoc.delete();
+        await _localStorage.deleteRefuel(refuelId);
         return false;
       }
       
-      print('✅ Added refuel record: ₹$cost for ${kilometers.toStringAsFixed(0)} km');
+      DebugLogger.log('Added refuel record: ₹$cost for ${kilometers.toStringAsFixed(0)} km');
       return true;
     } catch (e) {
-      print('❌ Error adding refuel record: $e');
+      DebugLogger.logError('Error adding refuel record: $e');
       return false;
     }
   }
 
   // Get refuel records stream
   Stream<List<Refuel>> getRefuelsStream() {
-    return _refuelsRef
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return Refuel.fromJson({
-          'id': doc.id,
-          ...data,
-        });
-      }).toList();
-    });
+    try {
+      return _localStorage.getRefuelsStream();
+    } catch (e) {
+      DebugLogger.logError('Error getting refuels stream: $e');
+      return Stream.value([]);
+    }
   }
 
   // Get refuel records (one-time fetch)
   Future<List<Refuel>> getRefuels() async {
     try {
       if (_currentUserId == null) return [];
-      
-      final snapshot = await _refuelsRef
-          .orderBy('timestamp', descending: true)
-          .get();
-      
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        return Refuel.fromJson({
-          'id': doc.id,
-          ...data,
-        });
-      }).toList();
+      return await _localStorage.getAllRefuels();
     } catch (e) {
-      print('❌ Error getting refuel records: $e');
+      DebugLogger.logError('Error getting refuel records: $e');
       return [];
     }
   }
@@ -892,23 +966,19 @@ class AccountBalanceService {
       if (_currentUserId == null) return false;
       
       // Get refuel data first
-      final refuelDoc = await _refuelsRef.doc(refuelId).get();
-      if (!refuelDoc.exists) return false;
-      
-      final refuelData = refuelDoc.data() as Map<String, dynamic>;
-      final cost = (refuelData['cost'] as num).toDouble();
-      final kilometers = (refuelData['kilometers'] as num).toDouble();
+      final refuel = await _localStorage.getRefuel(refuelId);
+      if (refuel == null) return false;
       
       // Delete refuel record
-      await _refuelsRef.doc(refuelId).delete();
+      await _localStorage.deleteRefuel(refuelId);
       
       // Note: We don't automatically delete ledger entries as they might be referenced elsewhere
       // User can manually adjust if needed
       
-      print('✅ Deleted refuel record: ₹$cost for ${kilometers.toStringAsFixed(0)} km');
+      DebugLogger.log('Deleted refuel record: ₹${refuel.cost} for ${refuel.kilometers.toStringAsFixed(0)} km');
       return true;
     } catch (e) {
-      print('❌ Error deleting refuel record: $e');
+      DebugLogger.logError('Error deleting refuel record: $e');
       return false;
     }
   }
@@ -923,19 +993,11 @@ class AccountBalanceService {
   }) async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return false;
       }
 
-      final expenseTimestamp = timestamp ?? DateTime.now();
-      final expenseId = DateTime.now().millisecondsSinceEpoch.toString();
-
-      // Ensure account balance exists
-      await ensureAccountBalanceExists(accountId);
-
-      // Create ledger entry
-      final ledgerEntry = LedgerEntry(
-        id: expenseId,
+      return await addTransaction(
         accountId: accountId,
         rideId: '', // Empty for non-ride expenses
         type: TransactionType.debit,
@@ -943,22 +1005,9 @@ class AccountBalanceService {
         nature: TransactionNature.expense,
         amount: amount,
         description: description,
-        timestamp: expenseTimestamp,
       );
-
-      // Save ledger entry
-      await _ledgerRef.doc(expenseId).set(ledgerEntry.toJson());
-
-      // Update account balance (deduct amount)
-      await _balancesRef.doc(accountId).update({
-        'balance': FieldValue.increment(-amount),
-        'lastUpdated': expenseTimestamp.millisecondsSinceEpoch,
-      });
-
-      print('✅ Recorded expense: ${category.name} - ₹${amount.toStringAsFixed(2)} from account $accountId');
-      return true;
     } catch (e) {
-      print('❌ Error recording expense: $e');
+      DebugLogger.logError('Error recording expense: $e');
       return false;
     }
   }
@@ -967,25 +1016,20 @@ class AccountBalanceService {
   Future<bool> reverseRideTransactions(String rideId) async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return false;
       }
 
-      print('🔄 Reversing transactions for ride: $rideId');
+      DebugLogger.log('Reversing transactions for ride: $rideId');
 
       // Get all ledger entries for this ride
-      final ledgerEntries = await _ledgerRef
-          .where('rideId', isEqualTo: rideId)
-          .get();
+      final ledgerEntries = await _localStorage.getLedgerEntriesByRide(rideId);
 
-      print('📊 Found ${ledgerEntries.docs.length} ledger entries to reverse');
+      DebugLogger.log('Found ${ledgerEntries.length} ledger entries to reverse');
 
       // Process each ledger entry
-      for (final doc in ledgerEntries.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final ledgerEntry = LedgerEntry.fromJson(data);
-        
-        print('🔄 Reversing entry: ${ledgerEntry.category.name} - ${ledgerEntry.type.name} - ₹${ledgerEntry.amount}');
+      for (final ledgerEntry in ledgerEntries) {
+        DebugLogger.log('Reversing entry: ${ledgerEntry.category.name} - ${ledgerEntry.type.name} - ₹${ledgerEntry.amount}');
 
         // Reverse the transaction
         double adjustmentAmount;
@@ -998,23 +1042,21 @@ class AccountBalanceService {
         }
 
         // Update account balance
-        await _balancesRef.doc(ledgerEntry.accountId).update({
-          'balance': FieldValue.increment(adjustmentAmount),
-          'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-        });
+        final currentBalance = await getAccountBalance(ledgerEntry.accountId);
+        await updateAccountBalance(ledgerEntry.accountId, currentBalance + adjustmentAmount);
 
-        print('✅ Reversed ${ledgerEntry.category.name}: ₹${adjustmentAmount} for account ${ledgerEntry.accountId}');
+        DebugLogger.log('Reversed ${ledgerEntry.category.name}: ₹$adjustmentAmount for account ${ledgerEntry.accountId}');
       }
 
       // Delete all ledger entries for this ride
-      for (final doc in ledgerEntries.docs) {
-        await doc.reference.delete();
+      for (final ledgerEntry in ledgerEntries) {
+        await _localStorage.deleteLedgerEntry(ledgerEntry.id);
       }
 
-      print('✅ Successfully reversed all transactions for ride: $rideId');
+      DebugLogger.logSuccess('Successfully reversed all transactions for ride: $rideId');
       return true;
     } catch (e) {
-      print('❌ Error reversing ride transactions: $e');
+      DebugLogger.logError('Error reversing ride transactions: $e');
       return false;
     }
   }
@@ -1023,38 +1065,35 @@ class AccountBalanceService {
   Future<bool> initializeAllAccountBalances() async {
     try {
       if (_currentUserId == null) {
-        print('❌ AccountBalanceService: User not authenticated');
+        DebugLogger.logError('AccountBalanceService: User not authenticated');
         return false;
       }
 
-      print('🔄 Initializing all account balances for user $_currentUserId');
+      DebugLogger.log('Initializing all account balances for user $_currentUserId');
 
       final accounts = Account.getSampleAccounts();
-      final batch = _firestore.batch();
 
       for (final account in accounts) {
-        final docRef = _balancesRef.doc(account.id);
+        // Check if account balance already exists
+        final existing = await _localStorage.getAccountBalance(account.id);
         
-        // Check if document already exists
-        final doc = await docRef.get();
-        
-        if (!doc.exists) {
-          batch.set(docRef, {
-            'accountId': account.id,
-            'accountName': account.name,
-            'accountType': account.type,
-            'balance': 0.0,
-            'lastUpdated': DateTime.now().millisecondsSinceEpoch,
-          });
-          print('📝 Creating account balance for ${account.name}');
+        if (existing == null) {
+          final accountBalance = AccountBalance(
+            accountId: account.id,
+            accountName: account.name,
+            accountType: account.type,
+            balance: 0.0,
+            lastUpdated: DateTime.now(),
+          );
+          await _localStorage.saveAccountBalance(accountBalance);
+          DebugLogger.log('Creating account balance for ${account.name}');
         }
       }
 
-      await batch.commit();
-      print('✅ Initialized all account balances');
+      DebugLogger.logSuccess('Initialized all account balances');
       return true;
     } catch (e) {
-      print('❌ Error initializing account balances: $e');
+      DebugLogger.logError('Error initializing account balances: $e');
       return false;
     }
   }

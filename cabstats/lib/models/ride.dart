@@ -1,28 +1,60 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:hive/hive.dart';
 
-enum RideStatus { active, completed, cancelled }
+part 'ride.g.dart';
 
+@HiveType(typeId: 0)
+enum RideStatus {
+  @HiveField(0)
+  active,
+  @HiveField(1)
+  completed,
+  @HiveField(2)
+  cancelled,
+}
+
+@HiveType(typeId: 1)
 class Ride {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String userId;
+  @HiveField(2)
   final String startLocality;
+  @HiveField(3)
   final String? endLocality;
+  @HiveField(4)
   final DateTime startTime;
+  @HiveField(5)
   final DateTime? endTime;
+  @HiveField(6)
   final double km;
+  @HiveField(7)
   final double fare;
+  @HiveField(8)
   final double tollFee;
+  @HiveField(9)
   final double platformFee;
+  @HiveField(10)
   final double otherFee;
+  @HiveField(11)
   final double airportFee;
+  @HiveField(12)
   final Map<String, double> paymentSplits; // accountId -> amount
+  @HiveField(13)
   final String tollFeeAccount;
+  @HiveField(14)
   final String platformFeeAccount;
+  @HiveField(15)
   final String otherFeeAccount;
+  @HiveField(16)
   final String airportFeeAccount;
+  @HiveField(17)
   final RideStatus status;
+  @HiveField(18)
+  final DateTime lastModified;
   
-  // Calculated fields (mutable for calculations)
+  // Calculated fields (mutable for calculations) - not stored in Hive
   double? tip;
   double? profit;
   double? fuelAllocation;
@@ -48,12 +80,13 @@ class Ride {
     required this.otherFeeAccount,
     required this.airportFeeAccount,
     required this.status,
+    DateTime? lastModified,
     this.tip,
     this.profit,
     this.fuelAllocation,
     this.profitPerKm,
     this.profitPerMin,
-  });
+  }) : lastModified = lastModified ?? DateTime.now();
 
   // Calculate total amount received from all payment splits
   double getTotalAmountReceived() {
@@ -70,22 +103,22 @@ class Ride {
     return getTotalAmountReceived() - platformFee - otherFee - airportFee - tollFee;
   }
 
-  // Calculate fuel allocation (12 rupees per km)
+  // Calculate fuel allocation (50% of fare)
   double calculateFuelAllocation() {
-    return km * 12.0;
+    return fare * 0.5;
   }
 
-  // Calculate profit per KM
+  // Calculate per KM from fare only
   double calculateProfitPerKm() {
     if (km <= 0) return 0.0;
-    return calculateProfit() / km;
+    return fare / km;
   }
 
-  // Calculate profit per minute
+  // Calculate per minute from fare only
   double calculateProfitPerMin() {
     final durationMinutes = getDurationMinutes();
     if (durationMinutes <= 0) return 0.0;
-    return calculateProfit() / durationMinutes;
+    return fare / durationMinutes;
   }
 
   // Get duration in minutes
@@ -137,6 +170,7 @@ class Ride {
       'fuelAllocation': fuelAllocation,
       'profitPerKm': profitPerKm,
       'profitPerMin': profitPerMin,
+      'lastModified': lastModified.millisecondsSinceEpoch,
     };
   }
 
@@ -166,6 +200,9 @@ class Ride {
         (e) => e.name == json['status'],
         orElse: () => RideStatus.active,
       ),
+      lastModified: json['lastModified'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['lastModified'])
+          : DateTime.now(),
       tip: (json['tip'] as num?)?.toDouble(),
       profit: (json['profit'] as num?)?.toDouble(),
       fuelAllocation: (json['fuelAllocation'] as num?)?.toDouble(),
@@ -200,6 +237,7 @@ class Ride {
     String? otherFeeAccount,
     String? airportFeeAccount,
     RideStatus? status,
+    DateTime? lastModified,
     double? tip,
     double? profit,
     double? fuelAllocation,
@@ -225,6 +263,7 @@ class Ride {
       otherFeeAccount: otherFeeAccount ?? this.otherFeeAccount,
       airportFeeAccount: airportFeeAccount ?? this.airportFeeAccount,
       status: status ?? this.status,
+      lastModified: lastModified ?? DateTime.now(),
       tip: tip ?? this.tip,
       profit: profit ?? this.profit,
       fuelAllocation: fuelAllocation ?? this.fuelAllocation,
@@ -244,15 +283,15 @@ class Ride {
     // Profit = Amount Received – Platform Fee – Other Fee – Airport Fee – Toll Fee
     profit = totalAmountReceived - totalFees;
 
-    // Fuel Allocation = 12 rupees per km
-    fuelAllocation = km * 12.0;
+    // Fuel Allocation = 50% of fare
+    fuelAllocation = fare * 0.5;
 
-    // Profit Per KM = Profit / KM
-    profitPerKm = (km > 0) ? profit! / km : 0;
+    // Profit Per KM = Fare / KM
+    profitPerKm = (km > 0) ? fare / km : 0;
 
-    // Profit Per Min = Profit / Min
+    // Profit Per Min = Fare / Min
     final durationMinutes = getDurationMinutes();
-    profitPerMin = (durationMinutes > 0) ? profit! / durationMinutes : 0;
+    profitPerMin = (durationMinutes > 0) ? fare / durationMinutes : 0;
   }
 
   // Get formatted duration string (HH:MM:SS)

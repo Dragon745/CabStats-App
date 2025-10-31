@@ -1,25 +1,29 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 import '../models/ride.dart';
 import 'account_balance_service.dart';
+import 'local_storage_service.dart';
+import '../utils/debug_logger.dart';
 
 class RideService {
   static final RideService _instance = RideService._internal();
   factory RideService() => _instance;
   RideService._internal();
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final LocalStorageService _localStorage = LocalStorageService();
+  final Random _random = Random();
 
   // Get current user ID
   String? get _currentUserId => _auth.currentUser?.uid;
 
-  // Get rides collection for current user
-  CollectionReference get _ridesRef {
-    if (_currentUserId == null) {
-      throw Exception('User not authenticated');
-    }
-    return _firestore.collection('users').doc(_currentUserId!).collection('rides');
+  // Generate a unique ride ID
+  String _generateRideId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = _random.nextInt(10000);
+    return 'ride_${timestamp}_$random';
   }
 
   // Start a new ride
@@ -32,15 +36,18 @@ class RideService {
       // Check for existing active ride
       final existingActiveRide = await getActiveRide();
       if (existingActiveRide != null) {
-        print('❌ Cannot start new ride while another ride is active: ${existingActiveRide.id}');
+        DebugLogger.logError('Cannot start new ride while another ride is active: ${existingActiveRide.id}');
         throw Exception('An active ride already exists. Please end or cancel it first.');
       }
 
+      final rideId = _generateRideId();
+      final now = DateTime.now();
+
       final ride = Ride(
-        id: '', // Will be set after document creation
+        id: rideId,
         userId: _currentUserId!,
         startLocality: startLocality,
-        startTime: DateTime.now(),
+        startTime: now,
         km: 0.0,
         fare: 0.0,
         tollFee: 0.0,
@@ -55,24 +62,13 @@ class RideService {
         status: RideStatus.active,
       );
       
-      // Add timeout to prevent infinite loading
-      final docRef = await _ridesRef.add(ride.toJson()).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Firestore operation timed out');
-        },
-      );
+      // Save to local storage
+      await _localStorage.saveRide(ride);
+      DebugLogger.log('Ride started: $rideId');
       
-      // Update the ride with the document ID
-      final rideWithId = ride.copyWith(id: docRef.id);
-      // Update the ride with proper endTime format
-      await docRef.update({
-        'id': docRef.id,
-        'startTime': ride.startTime.millisecondsSinceEpoch,
-      });
-      
-      return rideWithId;
+      return ride;
     } catch (e) {
+      DebugLogger.logError('Error starting ride: $e');
       return null;
     }
   }
@@ -80,15 +76,33 @@ class RideService {
   // End a ride
   Future<bool> endRide(String rideId, Ride updatedRide) async {
     try {
+      // If rideId is empty, get the active ride
+      String targetRideId = rideId;
+      if (targetRideId.trim().isEmpty) {
+        final activeRide = await getActiveRide();
+        if (activeRide == null) {
+          throw Exception('No active ride found to end');
+        }
+        targetRideId = activeRide.id;
+      }
+
+      // Get existing ride to preserve data
+      final existingRide = await _localStorage.getRide(targetRideId);
+      if (existingRide == null) {
+        throw Exception('Ride not found: $targetRideId');
+      }
+
       final rideWithEndTime = updatedRide.copyWith(
+        id: targetRideId,
         endTime: DateTime.now(),
         status: RideStatus.completed,
       );
 
-      await _ridesRef.doc(rideId).update(rideWithEndTime.toJson());
+      await _localStorage.saveRide(rideWithEndTime);
+      DebugLogger.log('Ride ended: $targetRideId');
       return true;
     } catch (e) {
-      print('Error ending ride: $e');
+      DebugLogger.logError('Error ending ride: $e');
       return false;
     }
   }
@@ -96,13 +110,21 @@ class RideService {
   // Cancel a ride (marks as cancelled but keeps in database)
   Future<bool> cancelRide(String rideId) async {
     try {
-      await _ridesRef.doc(rideId).update({
-        'status': RideStatus.cancelled.name,
-        'endTime': DateTime.now().millisecondsSinceEpoch,
-      });
+      final existingRide = await _localStorage.getRide(rideId);
+      if (existingRide == null) {
+        return false;
+      }
+
+      final cancelledRide = existingRide.copyWith(
+        status: RideStatus.cancelled,
+        endTime: DateTime.now(),
+      );
       
+      await _localStorage.saveRide(cancelledRide);
+      DebugLogger.log('Ride cancelled: $rideId');
       return true;
     } catch (e) {
+      DebugLogger.logError('Error cancelling ride: $e');
       return false;
     }
   }
@@ -110,87 +132,107 @@ class RideService {
   // Get active ride
   Future<Ride?> getActiveRide() async {
     try {
-      final snapshot = await _ridesRef
-          .where('status', isEqualTo: RideStatus.active.name)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        final data = snapshot.docs.first.data() as Map<String, dynamic>;
-        return Ride.fromJson(data);
-      }
-      return null;
+      return await _localStorage.getActiveRide();
     } catch (e) {
-      print('Error getting active ride: $e');
+      DebugLogger.logError('Error getting active ride: $e');
       return null;
     }
   }
 
   // Stream for active ride updates
   Stream<Ride?> getActiveRideStream() {
-    return _ridesRef
-        .where('status', isEqualTo: RideStatus.active.name)
-        .limit(1)
-        .snapshots()
-        .map((snapshot) {
-      if (snapshot.docs.isNotEmpty) {
-        final data = snapshot.docs.first.data() as Map<String, dynamic>;
-        return Ride.fromJson(data);
-      }
-      return null;
-    });
+    try {
+      return _localStorage.getActiveRideStream();
+    } catch (e) {
+      DebugLogger.logError('Error getting active ride stream: $e');
+      return Stream.value(null);
+    }
   }
 
   // Get ride history
   Future<List<Ride>> getRideHistory({int limit = 50}) async {
     try {
-      print('🔍 Getting ride history with limit: $limit');
+      DebugLogger.log('Getting ride history with limit: $limit');
       
-      final snapshot = await _ridesRef
-          .orderBy('startTime', descending: true)
-          .limit(limit)
-          .get();
-
-      print('🔍 Firestore returned ${snapshot.docs.length} documents for ride history');
+      final allRides = await _localStorage.getAllRides();
       
-      List<Ride> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        print('🔍 Document ${doc.id}: status = ${data['status']}');
-        rides.add(Ride.fromJson(data));
-      }
-
-      print('🔍 Successfully parsed ${rides.length} rides from history');
-      return rides;
+      // Filter and sort: completed and cancelled, ordered by startTime descending
+      final rides = allRides
+          .where((ride) => ride.status != RideStatus.active)
+          .toList()
+        ..sort((a, b) => b.startTime.compareTo(a.startTime));
+      
+      final limitedRides = rides.take(limit).toList();
+      DebugLogger.log('Successfully retrieved ${limitedRides.length} rides from history');
+      return limitedRides;
     } catch (e) {
-      print('❌ Error getting ride history: $e');
+      DebugLogger.logError('Error getting ride history: $e');
       return [];
     }
   }
 
   // Stream for ride history
   Stream<List<Ride>> getRideHistoryStream({int limit = 50}) {
-    return _ridesRef
-        .orderBy('startTime', descending: true)
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
-      List<Ride> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        rides.add(Ride.fromJson(data));
-      }
-      return rides;
-    });
+    try {
+      return _localStorage.getRidesStream().map((rides) {
+        final filteredRides = rides
+            .where((ride) => ride.status != RideStatus.active)
+            .toList()
+          ..sort((a, b) => b.startTime.compareTo(a.startTime));
+        return filteredRides.take(limit).toList();
+      });
+    } catch (e) {
+      DebugLogger.logError('Error getting ride history stream: $e');
+      return Stream.value([]);
+    }
   }
 
   // Update ride (for mid-ride updates)
   Future<bool> updateRide(String rideId, Map<String, dynamic> updates) async {
     try {
-      await _ridesRef.doc(rideId).update(updates);
+      final existingRide = await _localStorage.getRide(rideId);
+      if (existingRide == null) {
+        return false;
+      }
+
+      // Create updated ride from existing + updates
+      final updatedRide = Ride(
+        id: existingRide.id,
+        userId: existingRide.userId,
+        startLocality: updates['startLocality'] as String? ?? existingRide.startLocality,
+        endLocality: updates['endLocality'] as String? ?? existingRide.endLocality,
+        startTime: updates['startTime'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(updates['startTime'])
+            : existingRide.startTime,
+        endTime: updates['endTime'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(updates['endTime'])
+            : existingRide.endTime,
+        km: (updates['km'] as num?)?.toDouble() ?? existingRide.km,
+        fare: (updates['fare'] as num?)?.toDouble() ?? existingRide.fare,
+        tollFee: (updates['tollFee'] as num?)?.toDouble() ?? existingRide.tollFee,
+        platformFee: (updates['platformFee'] as num?)?.toDouble() ?? existingRide.platformFee,
+        otherFee: (updates['otherFee'] as num?)?.toDouble() ?? existingRide.otherFee,
+        airportFee: (updates['airportFee'] as num?)?.toDouble() ?? existingRide.airportFee,
+        paymentSplits: updates['paymentSplits'] != null
+            ? Map<String, double>.from(updates['paymentSplits'])
+            : existingRide.paymentSplits,
+        tollFeeAccount: updates['tollFeeAccount'] as String? ?? existingRide.tollFeeAccount,
+        platformFeeAccount: updates['platformFeeAccount'] as String? ?? existingRide.platformFeeAccount,
+        otherFeeAccount: updates['otherFeeAccount'] as String? ?? existingRide.otherFeeAccount,
+        airportFeeAccount: updates['airportFeeAccount'] as String? ?? existingRide.airportFeeAccount,
+        status: updates['status'] != null
+            ? RideStatus.values.firstWhere(
+                (s) => s.name == updates['status'],
+                orElse: () => existingRide.status,
+              )
+            : existingRide.status,
+      );
+
+      await _localStorage.saveRide(updatedRide);
+      DebugLogger.log('Ride updated: $rideId');
       return true;
     } catch (e) {
-      print('Error updating ride: $e');
+      DebugLogger.logError('Error updating ride: $e');
       return false;
     }
   }
@@ -198,14 +240,9 @@ class RideService {
   // Get a specific ride by ID
   Future<Ride?> getRideById(String rideId) async {
     try {
-      final doc = await _ridesRef.doc(rideId).get();
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        return Ride.fromJson(data);
-      }
-      return null;
+      return await _localStorage.getRide(rideId);
     } catch (e) {
-      print('Error getting ride by ID: $e');
+      DebugLogger.logError('Error getting ride by ID: $e');
       return null;
     }
   }
@@ -213,9 +250,11 @@ class RideService {
   // Delete a ride
   Future<bool> deleteRide(String rideId) async {
     try {
-      await _ridesRef.doc(rideId).delete();
+      await _localStorage.deleteRide(rideId);
+      DebugLogger.log('Ride deleted: $rideId');
       return true;
     } catch (e) {
+      DebugLogger.logError('Error deleting ride: $e');
       return false;
     }
   }
@@ -223,7 +262,7 @@ class RideService {
   // Delete a ride with transaction reversal
   Future<bool> deleteRideWithTransactionReversal(String rideId) async {
     try {
-      print('🗑️ Deleting ride with transaction reversal: $rideId');
+      DebugLogger.log('Deleting ride with transaction reversal: $rideId');
       
       // Import AccountBalanceService
       final accountService = AccountBalanceService();
@@ -232,17 +271,17 @@ class RideService {
       final reversalSuccess = await accountService.reverseRideTransactions(rideId);
       
       if (!reversalSuccess) {
-        print('❌ Failed to reverse transactions for ride: $rideId');
+        DebugLogger.logError('Failed to reverse transactions for ride: $rideId');
         return false;
       }
       
-      // Then delete the ride document
-      await _ridesRef.doc(rideId).delete();
+      // Then delete the ride
+      await _localStorage.deleteRide(rideId);
       
-      print('✅ Successfully deleted ride with transaction reversal: $rideId');
+      DebugLogger.logSuccess('Successfully deleted ride with transaction reversal: $rideId');
       return true;
     } catch (e) {
-      print('❌ Error deleting ride with transaction reversal: $e');
+      DebugLogger.logError('Error deleting ride with transaction reversal: $e');
       return false;
     }
   }
@@ -278,7 +317,7 @@ class RideService {
         'averageProfitPerMin': totalMinutes > 0 ? totalProfit / totalMinutes : 0.0,
       };
     } catch (e) {
-      print('Error getting ride statistics: $e');
+      DebugLogger.logError('Error getting ride statistics: $e');
       return {
         'totalRides': 0,
         'totalKm': 0.0,
@@ -290,50 +329,77 @@ class RideService {
     }
   }
 
-  // Delete all rides for the current user
+  // Delete all rides for the current user (both local and Firestore)
   Future<bool> deleteAllRides() async {
     try {
       if (_currentUserId == null) {
-        print('❌ RideService: User not authenticated');
+        DebugLogger.logError('RideService: User not authenticated');
         return false;
       }
 
-      print('🗑️ Deleting all rides for user: $_currentUserId');
+      DebugLogger.log('Deleting all rides for user: $_currentUserId (local and Firestore)');
 
-      final ridesSnapshot = await _ridesRef.get();
-      for (final doc in ridesSnapshot.docs) {
-        await doc.reference.delete();
-        print('✅ Deleted ride: ${doc.id}');
+      // Get all rides from local storage first
+      final allRides = await _localStorage.getAllRides();
+      
+      // Delete from local storage
+      for (final ride in allRides) {
+        await _localStorage.deleteRide(ride.id);
+        DebugLogger.log('Deleted ride from local: ${ride.id}');
       }
 
-      print('✅ All rides deleted successfully');
+      // Delete from Firestore (batch delete for efficiency)
+      try {
+        final ridesRef = _firestore
+            .collection('users')
+            .doc(_currentUserId!)
+            .collection('rides');
+        
+        final snapshot = await ridesRef.get();
+        
+        // Batch delete (Firestore batch can handle up to 500 operations)
+        final batches = <WriteBatch>[];
+        WriteBatch? currentBatch;
+        int operationCount = 0;
+        
+        for (final doc in snapshot.docs) {
+          if (currentBatch == null || operationCount >= 450) {
+            currentBatch = _firestore.batch();
+            batches.add(currentBatch);
+            operationCount = 0;
+          }
+          
+          currentBatch.delete(doc.reference);
+          operationCount++;
+        }
+        
+        // Execute all batches
+        for (final batch in batches) {
+          await batch.commit();
+        }
+        
+        DebugLogger.logSuccess('Deleted ${snapshot.docs.length} rides from Firestore');
+      } catch (firestoreError) {
+        DebugLogger.logError('Error deleting rides from Firestore (local deletion succeeded): $firestoreError');
+        // Continue - local deletion succeeded
+      }
+
+      DebugLogger.logSuccess('All rides deleted successfully (local and Firestore)');
       return true;
     } catch (e) {
-      print('❌ Error deleting rides: $e');
+      DebugLogger.logError('Error deleting rides: $e');
       return false;
     }
   }
 
-  // Get all rides with pagination support
-  Future<List<Ride>> getAllRides({int limit = 50, DocumentSnapshot? lastDocument}) async {
+  // Get all rides with pagination support (simplified for local storage)
+  Future<List<Ride>> getAllRides({int limit = 50}) async {
     try {
-      Query query = _ridesRef.orderBy('startTime', descending: true);
-      
-      if (lastDocument != null) {
-        query = query.startAfterDocument(lastDocument);
-      }
-      
-      final snapshot = await query.limit(limit).get();
-      
-      List<Ride> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        rides.add(Ride.fromJson(data));
-      }
-      
-      return rides;
+      final allRides = await _localStorage.getAllRides();
+      allRides.sort((a, b) => b.startTime.compareTo(a.startTime));
+      return allRides.take(limit).toList();
     } catch (e) {
-      print('Error getting all rides: $e');
+      DebugLogger.logError('Error getting all rides: $e');
       return [];
     }
   }
@@ -341,28 +407,19 @@ class RideService {
   // Get only completed rides
   Future<List<Ride>> getCompletedRides({int limit = 50}) async {
     try {
-      print('🔍 Getting completed rides with limit: $limit');
-      print('🔍 Query: status == ${RideStatus.completed.name}');
+      DebugLogger.log('Getting completed rides with limit: $limit');
       
-      final snapshot = await _ridesRef
-          .where('status', isEqualTo: RideStatus.completed.name)
-          .orderBy('startTime', descending: true)
-          .limit(limit)
-          .get();
+      final allRides = await _localStorage.getAllRides();
+      final completedRides = allRides
+          .where((ride) => ride.status == RideStatus.completed)
+          .toList()
+        ..sort((a, b) => b.startTime.compareTo(a.startTime));
 
-      print('🔍 Firestore returned ${snapshot.docs.length} documents');
-      
-      List<Ride> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        print('🔍 Document ${doc.id}: status = ${data['status']}');
-        rides.add(Ride.fromJson(data));
-      }
-
-      print('🔍 Successfully parsed ${rides.length} completed rides');
-      return rides;
+      final limitedRides = completedRides.take(limit).toList();
+      DebugLogger.log('Successfully retrieved ${limitedRides.length} completed rides');
+      return limitedRides;
     } catch (e) {
-      print('❌ Error getting completed rides: $e');
+      DebugLogger.logError('Error getting completed rides: $e');
       return [];
     }
   }
@@ -374,25 +431,9 @@ class RideService {
     int limit = 100,
   }) async {
     try {
-      final startTimestamp = startDate.millisecondsSinceEpoch;
-      final endTimestamp = endDate.millisecondsSinceEpoch;
-      
-      final snapshot = await _ridesRef
-          .where('startTime', isGreaterThanOrEqualTo: startTimestamp)
-          .where('startTime', isLessThanOrEqualTo: endTimestamp)
-          .orderBy('startTime', descending: true)
-          .limit(limit)
-          .get();
-
-      List<Ride> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        rides.add(Ride.fromJson(data));
-      }
-
-      return rides;
+      return await _localStorage.getRidesByDateRange(startDate, endDate);
     } catch (e) {
-      print('Error getting rides by date range: $e');
+      DebugLogger.logError('Error getting rides by date range: $e');
       return [];
     }
   }
@@ -400,19 +441,19 @@ class RideService {
   // Get comprehensive ride statistics
   Future<Map<String, dynamic>> getComprehensiveStatistics() async {
     try {
-      print('🔍 Getting comprehensive statistics...');
+      DebugLogger.log('Getting comprehensive statistics...');
       
-      final allRides = await getRideHistory(limit: 1000);
-      print('🔍 All rides from history: ${allRides.length}');
+      final allRides = await _localStorage.getAllRides();
+      DebugLogger.log('All rides: ${allRides.length}');
       
       final completedRides = allRides.where((r) => r.status == RideStatus.completed).toList();
-      print('🔍 Completed rides filtered from all rides: ${completedRides.length}');
+      DebugLogger.log('Completed rides: ${completedRides.length}');
       
       final cancelledRides = allRides.where((r) => r.status == RideStatus.cancelled).toList();
-      print('🔍 Cancelled rides filtered from all rides: ${cancelledRides.length}');
+      DebugLogger.log('Cancelled rides: ${cancelledRides.length}');
 
       if (completedRides.isEmpty) {
-        print('🔍 No completed rides found, returning empty stats');
+        DebugLogger.log('No completed rides found, returning empty stats');
         return {
           'totalRides': 0,
           'completedRides': 0,
@@ -434,9 +475,9 @@ class RideService {
       // Calculate totals
       final totalKm = completedRides.fold(0.0, (sum, ride) => sum + ride.km);
       final totalFare = completedRides.fold(0.0, (sum, ride) => sum + ride.fare);
-      final totalProfit = completedRides.fold(0.0, (sum, ride) => sum + (ride.calculateProfit()));
-      final totalTip = completedRides.fold(0.0, (sum, ride) => sum + (ride.calculateTip()));
-      final totalFuelAllocation = completedRides.fold(0.0, (sum, ride) => sum + (ride.calculateFuelAllocation()));
+      final totalProfit = completedRides.fold(0.0, (sum, ride) => sum + ride.calculateProfit());
+      final totalTip = completedRides.fold(0.0, (sum, ride) => sum + ride.calculateTip());
+      final totalFuelAllocation = completedRides.fold(0.0, (sum, ride) => sum + ride.calculateFuelAllocation());
       
       // Calculate averages
       final averageProfitPerKm = totalKm > 0 ? totalProfit / totalKm : 0.0;
@@ -472,7 +513,7 @@ class RideService {
         'thisMonthProfit': thisMonthProfit,
       };
     } catch (e) {
-      print('Error getting comprehensive statistics: $e');
+      DebugLogger.logError('Error getting comprehensive statistics: $e');
       return {};
     }
   }
@@ -480,21 +521,14 @@ class RideService {
   // Debug method to get all rides without any filtering
   Future<List<Map<String, dynamic>>> getAllRidesRaw() async {
     try {
-      print('🔍 Getting all rides raw data...');
+      DebugLogger.log('Getting all rides raw data...');
       
-      final snapshot = await _ridesRef.get();
-      print('🔍 Firestore returned ${snapshot.docs.length} documents');
+      final allRides = await _localStorage.getAllRides();
+      DebugLogger.log('Retrieved ${allRides.length} rides');
 
-      List<Map<String, dynamic>> rides = [];
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        print('🔍 Document ${doc.id}: ${data.toString()}');
-        rides.add(data);
-      }
-
-      return rides;
+      return allRides.map((ride) => ride.toJson()).toList();
     } catch (e) {
-      print('❌ Error getting all rides raw: $e');
+      DebugLogger.logError('Error getting all rides raw: $e');
       return [];
     }
   }

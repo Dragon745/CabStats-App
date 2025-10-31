@@ -227,9 +227,9 @@ class _EditRideScreenState extends State<EditRideScreen> {
         }
       }
 
-      // Calculate fuel allocation (12 rupees per km)
-      final km = double.parse(_kmController.text);
-      final fuelAllocation = km * 12.0;
+      // Calculate fuel allocation (50% of fare)
+      final fare = double.parse(_fareController.text);
+      final fuelAllocation = fare * 0.5;
 
       // Process transactions atomically
       final success = await _accountService.processRideTransactionsAtomically(
@@ -573,7 +573,7 @@ class _EditRideScreenState extends State<EditRideScreen> {
                         children: [
                           const Text('Fuel Allocation:'),
                           Text(
-                            '₹${((double.tryParse(_kmController.text) ?? 0.0) * 12.0).toStringAsFixed(2)}',
+                            '₹${((double.tryParse(_fareController.text) ?? 0.0) * 0.5).toStringAsFixed(2)}',
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],

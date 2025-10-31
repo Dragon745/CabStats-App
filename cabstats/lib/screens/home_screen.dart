@@ -14,6 +14,8 @@ import 'fuel_screen.dart';
 import 'expense_screen.dart';
 import 'expense_stats_screen.dart';
 import 'rides_history_screen.dart';
+import 'sync_screen.dart';
+import '../widgets/sync_indicator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -66,6 +68,11 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         surfaceTintColor: const Color(0xFFE8EAED),
         actions: [
+          // Sync Indicator
+          const Padding(
+            padding: EdgeInsets.only(right: 8.0),
+            child: SyncIndicator(),
+          ),
           // QR Code Button
           IconButton(
             icon: const Icon(Icons.qr_code, color: Color(0xFF5F6368)),
@@ -104,10 +111,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
 
                 // Comprehensive Balance & Accounts Card
-                FutureBuilder<List<Account>>(
-                  future: _getAccountsWithBalances(),
+                StreamBuilder<Map<String, double>>(
+                  stream: _accountService.getAccountBalancesStream(),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
+                    if (snapshot.connectionState == ConnectionState.waiting || !snapshot.hasData) {
                       return Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
@@ -156,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }
 
-                    final accounts = snapshot.data ?? [];
+                    final accounts = _getAccountsWithBalancesFromStream(snapshot.data);
                     final totalBalance = _calculateTotalBalance(accounts);
 
                     return Container(
@@ -334,6 +341,87 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
+
+                // Pending Tips Card (Home dashboard quick card)
+                StreamBuilder<Map<String, dynamic>?>(
+                  stream: _accountService.getPendingTipsStream(),
+                  builder: (context, snapshot) {
+                    final data = snapshot.data;
+                    final amount = (data != null) ? ((data['amount'] as num?)?.toDouble() ?? 0.0) : 0.0;
+                    if (amount <= 0) return const SizedBox.shrink();
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0EA5E9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.wallet_giftcard,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              const Expanded(
+                                child: Text(
+                                  'Pending Tips',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: () async {
+                                  await _showTransferTipsDialog(context, amount);
+                                },
+                                child: const Text(
+                                  'Transfer',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            '₹${amount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 40,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          if (data != null && data['rideIds'] != null)
+                            Text(
+                              'From ${(data['rideIds'] as List).length} ride${((data['rideIds'] as List).length > 1) ? 's' : ''}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
 
                 // Quick Actions (Only Add Expense)
                 SizedBox(
@@ -527,6 +615,24 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(builder: (context) => const ExpenseStatsScreen()),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  const SizedBox(height: 8),
+                  
+                  // Sync
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.sync,
+                    title: 'Sync',
+                    subtitle: 'Sync with Firebase',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SyncScreen()),
                       );
                     },
                   ),
@@ -1248,6 +1354,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Fetch account balances from database
+  List<Account> _getAccountsWithBalancesFromStream(Map<String, double>? balances) {
+    final List<Account> sampleAccounts = Account.getSampleAccounts();
+    final List<Account> accountsWithBalances = [];
+    
+    for (final account in sampleAccounts) {
+      final balance = balances?[account.id] ?? 0.0;
+      
+      final accountWithBalance = Account(
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        balance: balance,
+        icon: account.icon,
+        color: account.color,
+      );
+      accountsWithBalances.add(accountWithBalance);
+    }
+    
+    return accountsWithBalances;
+  }
+
+  // Keep this method for backward compatibility if needed elsewhere
   Future<List<Account>> _getAccountsWithBalances() async {
     final List<Account> sampleAccounts = Account.getSampleAccounts();
     final List<Account> accountsWithBalances = [];
@@ -1407,6 +1535,50 @@ class _HomeScreenState extends State<HomeScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _showTransferTipsDialog(BuildContext context, double pendingAmount) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Transfer Pending Tips'),
+        content: Text('Transfer ₹${pendingAmount.toStringAsFixed(2)} to Savings from Main Account?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Transfer'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final ok = await _accountService.transferPendingTipsToSavings(
+        amount: pendingAmount,
+        fromAccountId: 'federal_bank',
+      );
+
+      if (!mounted) return;
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pending tips transferred to Savings'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to transfer pending tips'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

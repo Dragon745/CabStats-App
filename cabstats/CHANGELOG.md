@@ -5,9 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0] - 2025-10-31
+
+### Added
+
+- **Local-First Data Architecture**: Implemented comprehensive local-first data storage system with manual Firebase synchronization
+
+  - Added Hive local storage system for offline-first operations
+  - Created LocalStorageService for all data operations (rides, ledger, transfers, refuels, fuel allocation, tips, account balances)
+  - Created SyncService with two-way sync and timestamp-based conflict resolution (newest wins)
+  - Created NetworkService for connectivity detection
+  - Created MigrationService to load existing Firebase data to local storage on first launch
+  - Added `lastModified` timestamp field to all models (Ride, LedgerEntry, AccountTransfer, PendingFuelAllocation, Refuel, PendingTips, AccountBalance) for conflict resolution
+  - Added Hive annotations and code generation for all data models
+  - Manual sync functionality with conflict resolution indicator
+  - Sync must be triggered manually from drawer or sync screen (automatic background sync is disabled)
+  - Network security configuration for Jio and other carrier compatibility (explicitly allows Firebase/Google domains)
+  - Timeout handling in sync operations (30s timeout with fallback to cache on network failures)
+  - Fixed account balances stream to emit initial values immediately (no more loading spinner on app startup)
+  - Reset All Data now deletes from both local storage and Firestore (was only local before)
+
+- Comprehensive code review report (`CODE_REVIEW_REPORT.md`) documenting 20+ issues including critical bugs, code quality problems, and recommendations for improvements.
+- Pending Tips: running total, Home dashboard card, and transfer to Savings from Main Account as an expense. Added service methods and ride completion accumulation.
+
+### Changed
+
+- **RideService**: Refactored to use LocalStorageService instead of direct Firestore calls
+
+  - All ride operations now work locally and sync manually
+  - Faster ride operations with no network latency
+  - Active ride monitoring uses local storage streams
+
+- **AccountBalanceService**: Refactored to use LocalStorageService instead of direct Firestore calls
+
+  - All balance operations work locally
+  - Transactions, transfers, expenses, and refuels stored locally
+  - Real-time updates via local storage streams
+  - Removed Firestore transactions in favor of local atomic operations
+
+- **Main App Initialization**: Updated to initialize Hive and run data migration on first launch
+
+  - Hive initialized before app start
+  - Automatic migration from Firebase to local storage for existing users
+  - Seamless transition with no data loss
+  - Sync must be triggered manually (automatic background sync disabled)
+
+- Fuel allocation during ride save is now calculated as 50% of fare (was ₹12/km). Updated logic in `Ride.calculateFuelAllocation()`, `Ride.calculateMetrics()`, `EditRideScreen` summary and save flow, and `EndRideWizardScreen` metrics preview.
+- Profit-per metrics now derived from fare only: `profitPerKm = fare / km`, `profitPerMin = fare / minutes` (was based on profit). Implemented in `Ride` model and wizard preview calculations.
 
 ### Fixed
+
+- Prevent crash when ending ride with empty ride ID by resolving the active ride document ID in `RideService.endRide()`.
+- Ensure `Ride.id` is always populated by injecting Firestore `doc.id` when reading rides in `RideService` (active ride, history, streams, completed rides, by date, and get by ID).
 
 - **Expense Stats Screen Bug Fixes**: Fixed all 13 bugs in the expense stats screen
 
@@ -287,6 +336,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Location Service Issues**: Fixed starting location detection problems
+
   - Enhanced location permission handling with detailed error messages
   - Increased GPS timeout from 10 to 30 seconds for better reliability
   - Added comprehensive location readiness check before starting rides
@@ -302,6 +352,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Cleaned up debug information**: Removed all debug print statements and unnecessary logging from location service, ride service, and home screen
   - **Fixed RenderFlex overflow**: Added proper text overflow handling and maxLines constraints to prevent UI overflow issues in account cards and balance displays
   - **Fixed semantics assertion errors**: Restructured widget layout with proper Expanded/Flexible usage and added ValueKey to StreamBuilders to prevent parentDataDirty assertion failures
+
+- Firestore rules: allow nested writes under `users/{uid}/pendingTips/**` so transferring Pending Tips can append history within a transaction.
 
 ### Added
 
@@ -431,23 +483,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Expense Stats Screen**: Complete expense tracking and analytics interface
-  - Horizontal bar chart displaying expenses by category with percentages
-  - Period filter with date navigator (Today, Week, Month, Custom)
-  - Swipe-to-delete functionality for expenses with balance reversal
-  - Add Expense quick access button in app bar
-- **New Expense Category**: Tire Maintenance added to expense tracking
-
-### Changed
-
-- **Expense Stats Screen**: Changed default period from weekly to daily
-- **Expense Screen**: Renamed from "Expense Management" to "Add Expense"
-- **Other Fee Category**: Renamed to "Miscellaneous" for better clarity
-- **Menu Drawer**: "Add Expense" renamed to "Expense Stats" with analytics focus
-
-### Technical Details
-
-- Horizontal bar chart replacing pie chart for better data visualization
-- All categories displayed without limitation in expense breakdown
-- Material Design 3 styling throughout expense screens
-- Delete transaction method with atomic balance reversal
+- Comprehensive README.md with project documentation, features, installation guide, and developer information

@@ -227,6 +227,13 @@ class _EndRideScreenState extends State<EndRideScreen> {
         );
       }
 
+      // Add pending tips
+      final tip = ride.tip ?? ride.calculateTip();
+      if (tip > 0) {
+        await _accountService.addPendingTip(tip, ride.id);
+        print('✅ Added pending tip: ₹$tip');
+      }
+
       print('Account transactions processed successfully');
     } catch (e) {
       print('Error processing account transactions: $e');

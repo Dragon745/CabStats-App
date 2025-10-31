@@ -112,15 +112,15 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
     // Profit = Amount Received - Platform Fee - Other Fee - Airport Fee - Toll Fee
     _profit = totalAmountReceived - totalFees;
 
-    // Fuel Allocation = 12 rupees per km
-    _fuelAllocation = km * 12.0;
+    // Fuel Allocation = 50% of fare
+    _fuelAllocation = fare * 0.5;
 
-    // Profit Per KM = Profit / KM
-    _profitPerKm = (km > 0) ? _profit / km : 0;
+    // Profit Per KM = Fare / KM
+    _profitPerKm = (km > 0) ? fare / km : 0;
 
-    // Profit Per Min = Profit / Minutes
+    // Profit Per Min = Fare / Minutes
     final durationMinutes = widget.ride.getDurationMinutes();
-    _profitPerMin = (durationMinutes > 0) ? _profit / durationMinutes : 0;
+    _profitPerMin = (durationMinutes > 0) ? fare / durationMinutes : 0;
 
     setState(() {});
   }
@@ -184,11 +184,16 @@ class _EndRideWizardScreenState extends State<EndRideWizardScreen> {
       updatedRide.calculateMetrics();
 
       // Save ride
-      final success = await _rideService.endRide(updatedRide.id!, updatedRide);
+      final success = await _rideService.endRide(widget.ride.id, updatedRide);
       
       if (success) {
         // Process account transactions
         await _processAccountTransactions(updatedRide);
+        // Add pending tips if any
+        if ((updatedRide.tip ?? 0.0) > 0) {
+          await _accountService.addPendingTip(updatedRide.tip!, updatedRide.id!);
+          print('✅ Added pending tip: ₹${updatedRide.tip}');
+        }
         
         if (mounted) {
           // Navigate to stats screen instead of closing

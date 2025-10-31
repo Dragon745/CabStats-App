@@ -1,52 +1,97 @@
-import 'package:flutter/material.dart';
+import 'package:hive/hive.dart';
 
+part 'ledger_entry.g.dart';
+
+@HiveType(typeId: 2)
 enum TransactionType {
+  @HiveField(0)
   debit,  // Money going out (fees, expenses)
+  @HiveField(1)
   credit, // Money coming in (payments received)
 }
 
+@HiveType(typeId: 3)
 enum TransactionCategory {
+  @HiveField(0)
   tollFee,
+  @HiveField(1)
   platformFee,
+  @HiveField(2)
   airportFee,
+  @HiveField(3)
   parkingFee,
+  @HiveField(4)
   fuel,
+  @HiveField(5)
   cigarettes,
+  @HiveField(6)
   tea,
+  @HiveField(7)
   water,
+  @HiveField(8)
   food,
+  @HiveField(9)
   goodies,
+  @HiveField(10)
   cleaning,
+  @HiveField(11)
   withdrawal,
+  @HiveField(12)
   saving,
+  @HiveField(13)
   rent,
+  @HiveField(14)
   tireMaintenance,
+  @HiveField(15)
   otherFee,
+  @HiveField(16)
   paymentReceived,
+  @HiveField(17)
   rideStart,
+  @HiveField(18)
   rideEnd,
+  @HiveField(19)
   rideCancel,
+  @HiveField(20)
   adjustment,
 }
 
+@HiveType(typeId: 4)
 enum TransactionNature {
+  @HiveField(0)
   earning,    // Money earned (ride payments, tips)
+  @HiveField(1)
   expense,    // Money spent (fuel, maintenance, etc.)
+  @HiveField(2)
   transfer,   // Internal transfer between accounts
+  @HiveField(3)
   adjustment, // Manual balance adjustment
 }
 
+@HiveType(typeId: 5)
 class LedgerEntry {
+  @HiveField(0)
   final String id;
+  @HiveField(1)
   final String accountId;
+  @HiveField(2)
   final String rideId;
+  @HiveField(3)
   final TransactionType type;
+  @HiveField(4)
   final TransactionCategory category;
+  @HiveField(5)
   final TransactionNature nature;
+  @HiveField(6)
   final double amount;
+  @HiveField(7)
   final String description;
+  @HiveField(8)
   final DateTime timestamp;
+  @HiveField(9)
   final String? reference; // Optional reference (like ride ID)
+  @HiveField(10)
+  final DateTime lastModified;
 
   LedgerEntry({
     required this.id,
@@ -59,7 +104,8 @@ class LedgerEntry {
     required this.description,
     required this.timestamp,
     this.reference,
-  });
+    DateTime? lastModified,
+  }) : lastModified = lastModified ?? DateTime.now();
 
   // Convert to JSON for Firebase
   Map<String, dynamic> toJson() {
@@ -74,6 +120,7 @@ class LedgerEntry {
       'description': description,
       'timestamp': timestamp.millisecondsSinceEpoch,
       'reference': reference,
+      'lastModified': lastModified.millisecondsSinceEpoch,
     };
   }
 
@@ -99,6 +146,9 @@ class LedgerEntry {
       description: json['description'],
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp']),
       reference: json['reference'],
+      lastModified: json['lastModified'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(json['lastModified'])
+          : DateTime.now(),
     );
   }
 
